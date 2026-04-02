@@ -35,6 +35,7 @@ Before a swap is allowed to go through, the hook will evaluate a set of signals 
 If the final risk score is acceptable, the swap proceeds.
 If the score is too high, the hook reverts and blocks the trade.
 
+
 ## Risk Checks
 
 The first version will focus on simple and practical protections:
