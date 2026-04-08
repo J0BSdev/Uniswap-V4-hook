@@ -9,7 +9,7 @@ pragma solidity ^0.8.24;
 import {IHooks} from "@libraries/v4-core/src/interfaces/IHooks.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {BeforeSwapDelta,BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {BeforeSwapDelta,BeforeSwapDeltaLibrary} from "@libraries/v4-core/src/types/BeforeSwapDelta.sol";
 import{Hooks} from "@libraries/v4-core/src/libraries/Hooks.sol";
 import{BaseTestHooks} from "@uniswap/v4-core/src/libraries/BaseTestHooks.sol";
 import {OnlyPoolManager} from "@libraries/v4-core/src/hooks/OnlyPoolManager.sol";
