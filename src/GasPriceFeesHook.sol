@@ -5,12 +5,13 @@ pragma solidity ^0.8.24;
 /// @author Lovro Posel
 /// @notice Hook to check the gas price and fees of the transaction
 import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
-import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
-import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
-import {LPFeeLibrary} from "../lib/v4-core/src/libraries/LPFeeLibrary.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
+import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 contract GasPriceFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
@@ -24,7 +25,7 @@ contract GasPriceFeesHook is BaseHook {
 
     constructor(IPoolManager _manager) BaseHook(_manager) {
         updateMovingAverage();
-    }
+    }   
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -45,14 +46,13 @@ contract GasPriceFeesHook is BaseHook {
         });
     }
 
-    function beforeInitialize(address, PoolKey calldata key, uint160) external pure override returns (bytes4) {
-        if (!key.fee.isDynamicFees()) revert _MustUseDynamicFees();
-        return this.beforeInitialize.selector;
+    function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
+        if (!key.fee.isDynamicFee()) revert _MustUseDynamicFees();
+        return BaseHook.beforeInitialize.selector;
     }
 
-    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
-        external
-        view
+    function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+        internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
@@ -64,16 +64,16 @@ contract GasPriceFeesHook is BaseHook {
         uint24 fee = getFee();
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
-        return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
     }
 
-    function afterSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
-        external
+    function _afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+        internal
         override
         returns (bytes4, int128)
     {
         updateMovingAverage();
-        return (this.afterSwap.selector, 0);
+        return (BaseHook.afterSwap.selector, 0);
     }
 
     function getFee() internal view returns (uint24) {
