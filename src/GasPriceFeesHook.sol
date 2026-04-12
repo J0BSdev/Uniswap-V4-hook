@@ -14,18 +14,25 @@ pragma solidity ^0.8.24;
 
 
  contract GasPriceFeesHook is BaseHooks {
+    using LpFeeLibrary for uint24;
 
 uint128 public movingAverageGasPrice; // current moving average gas price
 uint104 public movingAverageGasPriceCount; //the number of txns we ve observed to get to that value
 
-    uint24 public contsant BASE_FEES = 5000; //pips, 0.5% fee
+    uint24 public constant BASE_FEES = 5000; //pips, 0.5% fee
+
+
+
+    error _MustUseDynamicFees();
 
 
 
 
 
 
-constructor(IPoolManager _manager) BaseHook(_manager) {}
+constructor(IPoolManager _manager) BaseHook(_manager) {
+    updateMovingAverage();
+}
 
 
 
@@ -48,9 +55,41 @@ function getHookPermissions() public
         beforeSwapReturnDelta: false,
         afterSwapReturnDelta: false,
         afterAddLiquidityReturnDelta: false,
-        afterRemoveLiquidityReturnDelta: false,
+        afterRemoveLiquidityReturnDelta: false
     });
  }
+
+function beforeInitialize(adress, PoolKey calldata key, uint160)
+ external pure override returns(bytes4){
+    if(!key.fee.isDynamicFees()) revert _MustUseDynamicFees();
+return this.beforeInitialize.selector;
+ }
+
+
+
+
+ function beforeSwap(adress , PoolKey calldata key, IPoolManager.SwapParams calldata , bytes calldata)
+ external override onlyPoolManager returns(bytes4, BeforeSwapDelta, uint24){
+
+
+//1. look at gas price for this swap
+//2. compare to moving average gas price
+//3. get a fee value to charge for this swap
+//4. return the new fee value
+ }
+function getFee() internal view returns(uint24){
+    uint128 gasPrice = uint128(tx.gasprice);
+    if (gasPrice > movingAverageGasPrice * 11 / 10) {
+        return BASE_FEES / 2;
+    }
+    if(gasPrice < movingAverageGasPrice * 9 / 10) {
+        return BASE_FEES * 2;
+    }
+    return BASE_FEES;
+}
+
+
+
 
  function updateMovingAverage() internal{
     uint128 gasPrice = uint128(tx.gasprice);
