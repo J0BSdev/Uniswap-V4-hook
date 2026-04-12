@@ -12,8 +12,8 @@ import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
 import {LPFeeLibrary} from "../lib/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
 
-contract GasPriceFeesHook is BaseHooks {
-    using LpFeeLibrary for uint24;
+contract GasPriceFeesHook is Hooks {
+    using LPFeeLibrary for uint24;
 
     uint128 public movingAverageGasPrice; // current moving average gas price
     uint104 public movingAverageGasPriceCount; //the number of txns we ve observed to get to that value
@@ -22,7 +22,7 @@ contract GasPriceFeesHook is BaseHooks {
 
     error _MustUseDynamicFees();
 
-    constructor(IPoolManager _manager) BaseHook(_manager) {
+    constructor(IPoolManager _manager) Hooks(_manager) {
         updateMovingAverage();
     }
 
@@ -45,15 +45,14 @@ contract GasPriceFeesHook is BaseHooks {
         });
     }
 
-    function beforeInitialize(adress, PoolKey calldata key, uint160) external pure override returns (bytes4) {
+    function beforeInitialize(address, PoolKey calldata key, uint160) external pure override returns (bytes4) {
         if (!key.fee.isDynamicFees()) revert _MustUseDynamicFees();
         return this.beforeInitialize.selector;
     }
 
-    function beforeSwap(adress, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+    function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
         external
         override
-        onlyPoolManager
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         //1. look at gas price for this swap
