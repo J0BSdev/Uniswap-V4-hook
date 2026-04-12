@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 /// @title GasPriceFeesHook
 /// @author Lovro Posel
 /// @notice Hook to check the gas price and fees of the transaction
-import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
+import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
 import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
@@ -12,7 +12,7 @@ import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
 import {LPFeeLibrary} from "../lib/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
 
-contract GasPriceFeesHook is Hooks {
+contract GasPriceFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
 
     uint128 public movingAverageGasPrice; // current moving average gas price
@@ -22,7 +22,7 @@ contract GasPriceFeesHook is Hooks {
 
     error _MustUseDynamicFees();
 
-    constructor(IPoolManager _manager) Hooks(_manager) {
+    constructor(IPoolManager _manager) BaseHook(_manager) {
         updateMovingAverage();
     }
 
@@ -52,6 +52,7 @@ contract GasPriceFeesHook is Hooks {
 
     function beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
         external
+        view
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
@@ -66,7 +67,7 @@ contract GasPriceFeesHook is Hooks {
         return (this.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
     }
 
-    function afterSwap(adress, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+    function afterSwap(address, PoolKey calldata, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
         external
         override
         returns (bytes4, int128)
