@@ -78,4 +78,21 @@ contract GasPriceFeesHookTest is Test, Deployers {
 
 
 
+
+
+            //STEP = SANITY CHECK
+            // expect movinAveraagePrice = 10 gwei
+            // expect movingAverageGasPriceCount = 1 
+
+            uint128 movingAverageGasPriceCount = manager.movingAverageGasPriceCount(key);
+
+
+
+
+
+
+
+
+    }
+
 }
