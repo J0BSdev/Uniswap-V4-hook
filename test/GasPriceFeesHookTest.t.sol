@@ -11,13 +11,14 @@ import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
 import {PoolSwapTest} from "../lib/v4-core/src/test/PoolSwapTest.sol";
 import {GasPriceFeesHook} from "../src/GasPriceFeesHook.sol";
 import {TickMath} from "../lib/v4-core/src/libraries/TickMath.sol";
-import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 
 contract GasPriceFeesHookTest is Test, Deployers {
     using CurrencyLibrary for Currency;
@@ -44,7 +45,7 @@ contract GasPriceFeesHookTest is Test, Deployers {
         hook = GasPriceFeesHook(hookAddress);
 
         // initialize a new pool
-        (key,) = initPool(currency0, currency1, hook, LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
+        (key,) = initPool(currency0, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
 
 
         //add liquidity to the pool
@@ -104,7 +105,7 @@ contract GasPriceFeesHookTest is Test, Deployers {
             uint256 outputFromBaseFeeSwap = balanceOfToken1After - balanceOfToken1Before;
             
 
-            assertEq(balanceOfToken1After , balanceOfToken1Before);
+            assertGt(balanceOfToken1After , balanceOfToken1Before);
             movingAverageGasPrice = hook.movingAverageGasPrice();
             movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
             assertEq(movingAverageGasPrice, 10 gwei);
@@ -118,7 +119,57 @@ contract GasPriceFeesHookTest is Test, Deployers {
 
 
             vm.txGasPrice(4 gwei);
-            
+            balanceOfToken1Before = currency1.balanceOfSelf();
+            swapRouter.swap(key, params , testSettings, ZERO_BYTES);
+            balanceOfToken1After = currency1.balanceOfSelf();
+
+            uint256 outputfromIncreasedFeeSwap = balanceOfToken1After - balanceOfToken1Before;
+
+            assertEq(balanceOfToken1After , balanceOfToken1Before);
+
+            // our moving average should now be ( 10 + 10 + 4) / 3 = 8 gwei
+            movingAverageGasPrice = hook.movingAverageGasPrice();
+            movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
+            assertEq(movingAverageGasPrice, 8 gwei);
+            assertEq(movingAverageGasPriceCount, 3);
+
+           
+
+
+
+
+            // STEP 4 = THIRD SWAP
+            //sell token0 for token1
+            //at a gas price of 12 gwei
+
+            vm.txGasPrice(12 gwei);
+            balanceOfToken1Before = currency1.balanceOfSelf();
+            swapRouter.swap(key, params , testSettings, ZERO_BYTES);
+            balanceOfToken1After = currency1.balanceOfSelf();
+
+            uint256 outputFromDecreasedFeeSwap = balanceOfToken1After - balanceOfToken1Before;
+
+            assertGt(balanceOfToken1After , balanceOfToken1Before);
+
+            // our movung average should now be ( 10 + 10 + 4 + 12) / 4 = 9 gwei
+            movingAverageGasPrice = hook.movingAverageGasPrice();
+            movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
+        
+        assertEq(movingAverageGasPrice, 9 gwei);
+        assertEq(movingAverageGasPriceCount, 4);
+
+
+
+
+        assertGt(outputFromDecreasedFeeSwap, outputFromBaseFeeSwap);
+        assertGt(outputFromBaseFeeSwap, outputfromIncreasedFeeSwap);
+
+
+        console.log("outputFromBaseFeeSwap", outputFromBaseFeeSwap);
+        console.log("outputfromIncreasedFeeSwap", outputfromIncreasedFeeSwap);
+        console.log("outputFromDecreasedFeeSwap", outputFromDecreasedFeeSwap);
+       
+
 
 
     }
