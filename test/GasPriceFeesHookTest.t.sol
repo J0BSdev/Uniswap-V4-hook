@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
 import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
-import {Deployers} from "../lib/v4-hooks-public/test/Deployers.sol";
-import {MockERC20} from "solmate/test/utils/mocks/MockERC20.sol";
-import {PoolManager} from "../lib/v4-core/src/test/PoolManager.sol";
-import {Currency, CurrencyLibrary} from "../lib/v4-core/src/test/Currency.sol";
-import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/test/PoolId.sol";
+import {Deployers} from "../lib/v4-core/test/utils/Deployers.sol";
+import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
+import {PoolManager} from "../lib/v4-core/src/PoolManager.sol";
+import {Currency, CurrencyLibrary} from "../lib/v4-core/src/types/Currency.sol";
+import {PoolId, PoolIdLibrary} from "../lib/v4-core/src/types/PoolId.sol";
 import {PoolSwapTest} from "../lib/v4-core/src/test/PoolSwapTest.sol";
 import {GasPriceFeesHook} from "../src/GasPriceFeesHook.sol";
 import {TickMath} from "../lib/v4-core/src/libraries/TickMath.sol";
