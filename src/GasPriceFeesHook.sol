@@ -25,7 +25,7 @@ contract GasPriceFeesHook is BaseHook {
 
     constructor(IPoolManager _manager) BaseHook(_manager) {
         updateMovingAverage();
-    }   
+    }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({

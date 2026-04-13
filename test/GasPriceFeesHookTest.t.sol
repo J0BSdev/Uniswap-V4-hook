@@ -19,6 +19,31 @@ import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
-contract GasPriceFeesHookTest is Test {
-    GasPriceFeesHook public gasPriceFeesHook;
+contract GasPriceFeesHookTest is Test, Deployers {
+    using CurrencyLibrary for Currency;
+    using PoolIdLibrary for PoolId;
+
+    GasPriceFeesHook hook;
+
+    function setUp() public {
+        //deploy v4 core contracts
+        deployFreshManagerAndRouters();
+
+        //deploy 2 erc-20 tokens ,mint some amount of them to ourselves
+        //and approve all router contracts to spend them
+        deployMintAndApprove2Currencies();
+
+        //deploy our hook
+        address hookAddress =
+            address(uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG));
+
+        //NOTE: by default in the testing environment, gas price is set to 0
+
+        vm.txGasPrice(10 gwei);
+        deployCodeTo("GasPriceFeesHook.sol", abi.encode(manager), hookAddress);
+        hook = GasPriceFeesHook(hookAddress);
+
+        // initialize a new pool
+        (key,) = initPool(currency0, currency1, hook, LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
+    }
 }
