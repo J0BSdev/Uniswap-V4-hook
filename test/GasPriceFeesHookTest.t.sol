@@ -45,5 +45,37 @@ contract GasPriceFeesHookTest is Test, Deployers {
 
         // initialize a new pool
         (key,) = initPool(currency0, currency1, hook, LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
+
+
+        //add liquidity to the pool
+        modifyLiquidityRouter.modifyLiquidity(key, IPoolManager.ModifyLiquidityParams({
+            tickLower : -60
+            tickUpper : 60,
+            liquidityDelta: 100e18
+            salt:bytes32(0)
+        }),
+        ZERO_BYTES,
+        );
     }
+
+
+
+    function test_feesUpdatesWithGasPrice() public {
+
+        //we're gonna do 3 swaps
+        //1 swap = expect fees being charged = base fees
+        //1 swap = expect fees being charged < base fees
+        //1 swap = expect fees being charged > base fees
+
+        PoolSWapTest.TestSettings memory testSettings = PoolSwapTest.TestSettings({
+            takeClaims : false, settleUsingBurn : false,});
+
+            IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+                zeroForOne : true,
+                amountSpecified : -0.00001 ether,
+                sqrtPriceLimitX96 : TickMath.MIN_SQRT_PRICE + 1
+            });
+
+
+
 }
