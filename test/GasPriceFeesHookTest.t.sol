@@ -49,12 +49,12 @@ contract GasPriceFeesHookTest is Test, Deployers {
 
         //add liquidity to the pool
         modifyLiquidityRouter.modifyLiquidity(key, IPoolManager.ModifyLiquidityParams({
-            tickLower : -60
+            tickLower : -60,
             tickUpper : 60,
-            liquidityDelta: 100e18
+            liquidityDelta: 100e18,
             salt:bytes32(0)
         }),
-        ZERO_BYTES,
+        ZERO_BYTES
         );
     }
 
@@ -67,10 +67,10 @@ contract GasPriceFeesHookTest is Test, Deployers {
         //1 swap = expect fees being charged < base fees
         //1 swap = expect fees being charged > base fees
 
-        PoolSWapTest.TestSettings memory testSettings = PoolSwapTest.TestSettings({
-            takeClaims : false, settleUsingBurn : false,});
+        PoolSwapTest.TestSettings memory testSettings = PoolSwapTest.TestSettings({
+            takeClaims : false, settleUsingBurn : false});
 
-            IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+            IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
                 zeroForOne : true,
                 amountSpecified : -0.00001 ether,
                 sqrtPriceLimitX96 : TickMath.MIN_SQRT_PRICE + 1
@@ -84,13 +84,41 @@ contract GasPriceFeesHookTest is Test, Deployers {
             // expect movinAveraagePrice = 10 gwei
             // expect movingAverageGasPriceCount = 1 
 
-            uint128 movingAverageGasPriceCount = manager.movingAverageGasPriceCount(key);
+            uint128 movingAverageGasPrice = hook.movingAverageGasPrice();
+            uint104 movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
+            assertEq(movingAverageGasPrice, 10 gwei);
+            assertEq(movingAverageGasPriceCount, 1);
 
 
 
 
 
+            // STEP 2 = FIRST SWAP
+            //sell token0 for token1
+            //at a gas price of 10 gwei
+            // keep track of how muck token1 we get back
 
+            uint256 balanceOfToken1Before = currency1.balanceOfSelf();
+            swapRouter.swap(key, params , testSettings, ZERO_BYTES);
+            uint256 balanceOfToken1After = currency1.balanceOfSelf();
+            uint256 outputFromBaseFeeSwap = balanceOfToken1After - balanceOfToken1Before;
+            
+
+            assertEq(balanceOfToken1After , balanceOfToken1Before);
+            movingAverageGasPrice = hook.movingAverageGasPrice();
+            movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
+            assertEq(movingAverageGasPrice, 10 gwei);
+            assertEq(movingAverageGasPriceCount, 2);
+
+
+
+            // STEP 3 = SECOND SWAP
+            // sell token0 for token1
+            //at a gas price of 4 gwei
+
+
+            vm.txGasPrice(4 gwei);
+            
 
 
     }
