@@ -12,12 +12,12 @@ import {PoolSwapTest} from "../lib/v4-core/src/test/PoolSwapTest.sol";
 import {GasPriceFeesHook} from "../src/GasPriceFeesHook.sol";
 import {TickMath} from "../lib/v4-core/src/libraries/TickMath.sol";
 import {IPoolManager} from "../lib/v4-core/src/interfaces/IPoolManager.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
-import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
-import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
-import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {PoolKey} from "../lib/v4-core/src/types/PoolKey.sol";
+import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
+import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
+import {LPFeeLibrary} from "../lib/v4-core/src/libraries/LPFeeLibrary.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
+import {SwapParams} from "../lib/v4-core/src/test/PoolSwapTest.sol";
 import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 
 contract GasPriceFeesHookTest is Test, Deployers {
