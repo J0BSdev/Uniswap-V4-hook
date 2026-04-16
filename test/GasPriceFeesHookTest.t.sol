@@ -17,7 +17,6 @@ import {BalanceDelta} from "../lib/v4-core/src/types/BalanceDelta.sol";
 import {Hooks} from "../lib/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "../lib/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "../lib/v4-core/src/types/BeforeSwapDelta.sol";
-import {SwapParams} from "../lib/v4-core/src/test/PoolSwapTest.sol";
 import {IHooks} from "../lib/v4-core/src/interfaces/IHooks.sol";
 
 contract GasPriceFeesHookTest is Test, Deployers {
