@@ -13,7 +13,7 @@ import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
-contract GasPriceFeesHook is BaseHoo {
+contract GasPriceFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
 
     uint128 public movingAverageGasPrice; // current moving average gas price
