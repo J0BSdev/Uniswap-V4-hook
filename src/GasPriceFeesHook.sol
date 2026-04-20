@@ -30,7 +30,7 @@ contract GasPriceFeesHook is BaseHook {
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: true,
-            afterInitialize: false,
+            afterInitialize: fa
             beforeAddLiquidity: false,
             beforeRemoveLiquidity: false,
             afterAddLiquidity: false,
