@@ -12,8 +12,3 @@ docs/
 
 # Dotenv file
 .env
-
-# Nested LimitOrders project dependencies (install via `cd LimitOrders && forge install ...`)
-LimitOrders/lib/
-LimitOrders/cache/
-LimitOrders/out/
