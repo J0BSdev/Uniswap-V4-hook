@@ -18,7 +18,7 @@ contract GasPriceFeesHook is BaseHook {
 
     uint128 public movingAverageGasPrice; // current moving average gas price
     uint104 public movingAverageGasPriceCount; //the number of txns we 
-    e observed to get to that value
+   //observed to get to that value
 
     uint24 public constant BASE_FEES = 5000; //pips, 0.5% fee
 
