@@ -17,8 +17,8 @@ contract GasPriceFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
 
     uint128 public movingAverageGasPrice; // current moving average gas price
-    uint104 public movingAverageGasPriceCount; //the number of txns we 
-   //observed to get to that value
+    uint104 public movingAverageGasPriceCount; //the number of txns we
+    //observed to get to that value
 
     uint24 public constant BASE_FEES = 5000; //pips, 0.5% fee
 
@@ -54,6 +54,7 @@ contract GasPriceFeesHook is BaseHook {
 
     function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
         internal
+        view
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {

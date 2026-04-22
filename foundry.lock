@@ -13,5 +13,8 @@
       "name": "v4.0.0",
       "rev": "e50237c43811bd9b526eff40f26772152a42daba"
     }
+  },
+  "lib/v4-hooks-public": {
+    "rev": "d68c16abdc16f5e5319865739457ef17081ea789"
   }
 }
