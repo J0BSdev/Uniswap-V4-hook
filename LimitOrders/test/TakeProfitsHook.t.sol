@@ -14,7 +14,8 @@ import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 
 import {TakeProfitsHook} from "../src/TakeProfitsHook.sol";
@@ -137,52 +138,72 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
 
         int24 tickForOrder = hook.placeOrder(key, tickToSellAt, zeroForOne, amount);
 
-        //do a seperate swap for oneforzero makes tick go up such that the above order should get executed
-
-        IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+        // Do a separate oneForZero swap that pushes the tick up enough that the order above executes.
+        SwapParams memory swapParams = SwapParams({
             zeroForOne: false,
-            amountSpecified: -1,
-            sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE -1
-            
-            });
+            amountSpecified: -1 ether,
+            sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+        });
 
-            PoolSwapTest.TestSettings memory routerSettings = PoolSwapTest.TestSettings({
-                takeClaims: false,
-                settleUsingBurn: false,});
+        PoolSwapTest.TestSettings memory routerSettings =
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
-                swapRouter.swap(key, swapParams, routerSettings,ZERO_BYTES);
+        swapRouter.swap(key, swapParams, routerSettings, ZERO_BYTES);
 
+        uint256 pendingInputTokensForOrder = hook.pendingOrders(key.toId(), tickForOrder, zeroForOne);
+        assertEq(pendingInputTokensForOrder, 0);
 
-                uint256 pendingInputTokensForOrder = hook.pendingOrders[key.toId()][tickForOrder][zeroForOne];
-                assertEq(pendingInputTokensForOrder, 0);
+        uint256 positionId = hook.getPositionId(key, tickForOrder, zeroForOne);
+        uint256 claimable = hook.claimableOutputTokens(positionId);
+        uint256 hookToken1Balance = token1.balanceOf(address(hook));
+        assertEq(claimable, hookToken1Balance);
 
-                uint256 posotionId = hook.getPositionId(key, tickForOrder, zeroForOne);
-                uint256 claimableOutputTokens = hook.claimableOutputTokens(positionId);
-                uint256 hookToken1Balance = token1.balanceOf(address(hook));
-                assertEq(claimableOutputTokens, hookToken1Balance);
-
-                uint256 originalToken1Balance = token1.balanceOfSelf();
-                hook.redeem(key,tickForOrder,zeroForOne,amount);
-                uint256 newToken1Balance = token1.balanceOfSelf();
-                assertEq(newToken1Balance - originalToken1Balance, 
-                claimableOutputTokens);
-
-
-        
+        uint256 originalToken1Balance = token1.balanceOfSelf();
+        hook.redeem(key, tickForOrder, zeroForOne, amount);
+        uint256 newToken1Balance = token1.balanceOfSelf();
+        assertEq(newToken1Balance - originalToken1Balance, claimable);
     }
-
-
 
 
 
     // Test two: place a oneForZero order and make sure its executed if tick goes down
 
-    // Test three : place two separate orders at different tick values,make the tick go up just "sligthly' so that
-    //one of the placed orders is executed,but its execution negates the execution of the second one
+    function test_orderExecute_oneForZero() public {
+        int24 tickToSellAt = -100;
+        uint256 amount = 1e18;
+        bool zeroForOne = false;
 
-    //Test four: place two separate orders at different tick values, but make tick go up a lot
-//such that both orders are able to execute inside the same "afterSwap:
+        int24 tickForOrder = hook.placeOrder(key, tickToSellAt, zeroForOne, amount);
 
-f
+        // Do a separate zeroForOne swap that pushes the tick DOWN enough that the oneForZero order executes.
+        SwapParams memory swapParams = SwapParams({
+            zeroForOne: true,
+            amountSpecified: -1 ether,
+            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+        });
 
+        PoolSwapTest.TestSettings memory routerSettings =
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        swapRouter.swap(key, swapParams, routerSettings, ZERO_BYTES);
+
+        uint256 pendingInputTokensForOrder = hook.pendingOrders(key.toId(), tickForOrder, zeroForOne);
+        assertEq(pendingInputTokensForOrder, 0);
+
+        uint256 positionId = hook.getPositionId(key, tickForOrder, zeroForOne);
+        uint256 claimable = hook.claimableOutputTokens(positionId);
+        uint256 hookToken0Balance = token0.balanceOf(address(hook));
+        assertEq(claimable, hookToken0Balance);
+
+        uint256 originalToken0Balance = token0.balanceOfSelf();
+        hook.redeem(key, tickForOrder, zeroForOne, amount);
+        uint256 newToken0Balance = token0.balanceOfSelf();
+        assertEq(newToken0Balance - originalToken0Balance, claimable);
+    }
+
+    // Test three : place two separate orders at different tick values, make the tick go up just "slightly" so that
+    // one of the placed orders is executed, but its execution negates the execution of the second one.
+
+    // Test four: place two separate orders at different tick values, but make tick go up a lot
+    // such that both orders are able to execute inside the same `afterSwap`.
 }

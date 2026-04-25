@@ -26,7 +26,6 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
     using StateLibrary for IPoolManager;
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
-    using StateLibrary for IPoolManager;
 
     // ─── Errors ──────────────────────────────────────────────────────────────
     error InsufficientBalance();
@@ -95,14 +94,15 @@ we'll create a black-box magic funstion that font exist
  */
 
 
-    function afterSwap(
+    // NOTE: BaseHook (v4-periphery utils) exposes `afterSwap` as non-virtual external
+    // and only `_afterSwap` is virtual, so we MUST override `_afterSwap`, not `afterSwap`.
+    function _afterSwap(
         address sender,
         PoolKey calldata key,
         SwapParams calldata,
         BalanceDelta,
         bytes calldata
-    ) external override onlyPoolManager returns (bytes4, int128) {
-
+    ) internal override returns (bytes4, int128) {
         if (sender == address(this)) {
             return (this.afterSwap.selector, 0);
         }
