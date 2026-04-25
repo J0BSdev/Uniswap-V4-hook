@@ -203,6 +203,39 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
 
     // Test three : place two separate orders at different tick values, make the tick go up just "slightly" so that
     // one of the placed orders is executed, but its execution negates the execution of the second one.
+    
+    function test_multiple_orderExecute_zeroforOne_onlyOneExecution() public {
+        PoolSwapTest.TestSettings memory testSettings = PoolSwapTest
+        .TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        uint256 amount = 0.2 ether;
+
+        hook.placeOrder(key, 60, true, amount);
+        hook.placeOrder(key, 120, true, amount);
+
+        SwapParams memory swapParams = SwapParams({
+            zeroForOne: false,
+            amountSpecified: -0.2 ether,
+            sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE - 1
+        });
+
+       //we want this SWAP to move tick for 0 beyond 120
+       // BUT we want the execution of the first placed order to bring it back down below 60
+       //such that the order at tick 60 doesnt get executed
+
+        swapRouter.swap(key, swapParams, testSettings, ZERO_BYTES);
+
+ uint256 pendingInputTokensForOrderAtTick60 = hook.pendingOrders(key.toId(), 60, true);
+        assertEq(pendingInputTokensForOrderAtTick60, 0);
+
+        uint256 pendingInputTokensForOrderAtTick120 = hook.pendingOrders(key.toId(), 120, true);
+        assertNotEq(pendingInputTokensForOrderAtTick120, 0);
+
+       
+        
+}
+
+
 
     // Test four: place two separate orders at different tick values, but make tick go up a lot
     // such that both orders are able to execute inside the same `afterSwap`.
