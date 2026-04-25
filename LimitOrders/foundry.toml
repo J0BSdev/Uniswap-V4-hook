@@ -1,9 +1,7 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
-
-
+libs = ["lib", "../lib"]
 
 solc_version = '0.8.26'
 evm_version = "cancun"
