@@ -82,14 +82,26 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
         return this.afterInitialize.selector;
     }
 
-    function _afterSwap(
+/**
+
+so we're gonna go top-down
+we'll create a black-box magic funstion that font exist
+
+
+
+
+
+ */
+
+
+    function afterSwap(
         address sender,
         PoolKey calldata key,
         SwapParams calldata,
         BalanceDelta,
         bytes calldata
-    ) internal override returns (bytes4, int128) {
-        // Don't recurse: ignore swaps that this hook itself triggered while filling orders.
+    ) external override onlyPoolManager returns (bytes4, int128) {
+
         if (sender == address(this)) {
             return (this.afterSwap.selector, 0);
         }
