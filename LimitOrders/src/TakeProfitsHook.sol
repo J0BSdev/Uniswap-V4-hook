@@ -26,6 +26,7 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
     using StateLibrary for IPoolManager;
     using CurrencyLibrary for Currency;
     using CurrencySettler for Currency;
+    using StateLibrary for IPoolManager;
 
     // ─── Errors ──────────────────────────────────────────────────────────────
     error InsufficientBalance();
@@ -122,6 +123,65 @@ we'll create a black-box magic funstion that font exist
         return (this.afterSwap.selector, 0);
     }
 
+
+
+    function tryExecutingOrders(PoolKey calldata key,
+     bool orderDirection) internal returns (bool tryMore, int24 newTick) {
+
+        //1. get current tick of the pool(tick after bob s original swap)
+        
+        (, int24 currentTick, , ) = poolManager.getSlot0(key.toId());
+
+        //2. get last known tick of the pool(from our mappping
+
+        int24 lastTick = lastKnownTick[key.toId()];
+        
+        // Case (1) if newTick < lastTick
+
+        if (currentTick > lastTick) {
+            //loop form lastTick to currentTick
+            //iterating over 'tickSpacing; amount each time
+            //and execute orders looking to seel token 0
+
+            for(int24 tick = lastTick; tick <= currentTick; tick += key.tickSpacing) {
+                //execute some order if any
+                uint256 inputAmountToSell = pendingOrders[key.toId()][tick][orderDirection];
+                if (inputAmountToSell > 0) {
+
+                    _executeOrder(key, tick, orderDirection, inputAmountToSell);
+                    return (true,currentTick);
+                }
+
+            }
+        }else{
+            for(int24 tick = lastTick; tick >= currentTick; tick -= key.tickSpacing) {
+
+                uint256 inputAmountToSell = pendingOrders[key.toId()][tick][orderDirection];
+                if (inputAmountToSell > 0) {
+
+                    _executeOrder(key, tick, orderDirection, inputAmountToSell);
+                    return (true,currentTick);
+                }
+
+            }
+        }
+
+        
+        // Case (2) if newTick > lastTick
+
+        //if we find any orders in either case ,we execute the order 
+        // and then we return tryMore = true and the newTick value
+
+
+        //if we dont find anything to execute
+
+        //default return; tryMore = false, newTick = currentTick
+
+       return (false, currentTick);
+
+
+
+     }
     // ─── Order placement ─────────────────────────────────────────────────────
 
     /// @notice Place a take-profit (limit) order.
