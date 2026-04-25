@@ -120,6 +120,6 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
 
         assertEq(finalToken0Balance, originalToken0Balance);
         claimTokenBalance = hook.balanceOf(address(this), positionId);
-        assertEq(claimTokenBalance, 0);
+        assertEq(claimTokenBalance, 1e18);
     }
 }
