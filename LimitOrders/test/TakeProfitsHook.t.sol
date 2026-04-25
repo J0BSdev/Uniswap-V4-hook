@@ -19,7 +19,7 @@ import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155
 
 import {TakeProfitsHook} from "../src/TakeProfitsHook.sol";
 
-contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
+contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
     using StateLibrary for IPoolManager;
     using CurrencyLibrary for Currency;
 
@@ -123,23 +123,4 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder {
         assertEq(claimTokenBalance, 0);
     }
 
-    function onERC1155Received(
-        address,
-        address,
-        uint256,
-        uint256,
-        bytes calldata
-    ) external pure returns (bytes4) {
-        return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address,
-        uint256[] calldata,
-        uint256[] calldata,
-        bytes calldata
-    ) external pure returns (bytes4) {
-        return this.onERC1155BatchReceived.selector;
-    }
 }

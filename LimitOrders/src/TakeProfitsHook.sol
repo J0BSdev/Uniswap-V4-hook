@@ -44,7 +44,7 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
     mapping(uint256 positionId => uint256 outputClaimable) public claimableOutputTokens;
 
     // poolId => last observed tick after a swap (used to detect crossings)
-    mapping(PoolId poolId => int24 lastTick) public lastTicks;
+    mapping(PoolId poolId => int24 lastTick) public lastKnownTick;
 
     // ─── Constructor ─────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
         override
         returns (bytes4)
     {
-        lastTicks[key.toId()] = tick;
+        lastKnownTick[key.toId()] = tick;
         return this.afterInitialize.selector;
     }
 
@@ -95,7 +95,7 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
         }
 
         PoolId poolId = key.toId();
-        int24 lastTick = lastTicks[poolId];
+        int24 lastTick = lastKnownTick[poolId];
         (, int24 currentTick,,) = poolManager.getSlot0(poolId);
 
         // Try to fill any orders crossed by this swap. Each fill changes the price,
@@ -106,7 +106,7 @@ contract TakeProfitsHook is BaseHook, ERC1155 {
             lastTick = currentTick;
         }
 
-        lastTicks[poolId] = currentTick;
+        lastKnownTick[poolId] = currentTick;
         return (this.afterSwap.selector, 0);
     }
 
