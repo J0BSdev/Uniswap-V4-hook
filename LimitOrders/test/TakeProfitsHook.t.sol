@@ -123,4 +123,66 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
         assertEq(claimTokenBalance, 0);
     }
 
+
+
+
+    //four tests
+
+    //Test one: place zeroForOne order(sell token 0 ) and make sure its executed if tick goes up
+
+    function test_orderExecute_zeroforOne() public {
+        int24 tickToSellAt = 100;
+        uint256 amount = 10e18;
+        bool zeroForOne = true;
+
+        int24 tickForOrder = hook.placeOrder(key, tickToSellAt, zeroForOne, amount);
+
+        //do a seperate swap for oneforzero makes tick go up such that the above order should get executed
+
+        IPoolManager.SwapParams memory swapParams = IPoolManager.SwapParams({
+            zeroForOne: false,
+            amountSpecified: -1,
+            sqrtPriceLimitX96: TickMath.MAX_SQRT_PRICE -1
+            
+            });
+
+            PoolSwapTest.TestSettings memory routerSettings = PoolSwapTest.TestSettings({
+                takeClaims: false,
+                settleUsingBurn: false,});
+
+                swapRouter.swap(key, swapParams, routerSettings,ZERO_BYTES);
+
+
+                uint256 pendingInputTokensForOrder = hook.pendingOrders[key.toId()][tickForOrder][zeroForOne];
+                assertEq(pendingInputTokensForOrder, 0);
+
+                uint256 posotionId = hook.getPositionId(key, tickForOrder, zeroForOne);
+                uint256 claimableOutputTokens = hook.claimableOutputTokens(positionId);
+                uint256 hookToken1Balance = token1.balanceOf(address(hook));
+                assertEq(claimableOutputTokens, hookToken1Balance);
+
+                uint256 originalToken1Balance = token1.balanceOfSelf();
+                hook.redeem(key,tickForOrder,zeroForOne,amount);
+                uint256 newToken1Balance = token1.balanceOfSelf();
+                assertEq(newToken1Balance - originalToken1Balance, 
+                claimableOutputTokens);
+
+
+        
+    }
+
+
+
+
+
+    // Test two: place a oneForZero order and make sure its executed if tick goes down
+
+    // Test three : place two separate orders at different tick values,make the tick go up just "sligthly' so that
+    //one of the placed orders is executed,but its execution negates the execution of the second one
+
+    //Test four: place two separate orders at different tick values, but make tick go up a lot
+//such that both orders are able to execute inside the same "afterSwap:
+
+f
+
 }
