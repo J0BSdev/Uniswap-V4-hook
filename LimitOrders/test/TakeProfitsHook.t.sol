@@ -5,7 +5,7 @@ pragma solidity ^0.8.26;
 /// @author Lovro Posel
 /// @notice Tests for the TakeProfitsHook
 
-import {Test} from "forge-std/Test.sol"
+import {Test} from "forge-std/Test.sol";
 
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
