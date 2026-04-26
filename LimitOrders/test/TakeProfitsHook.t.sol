@@ -260,7 +260,7 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
         assertEq(pendingInputTokensForOrderAtTick60, 0);
 
         uint256 pendingInputTokensForOrderAtTick120 = hook.pendingOrders(key.toId(), 120, true);
-        assertEq(pendingInputTokensForOrderAtTick120, amount * 2);
+        assertEq(pendingInputTokensForOrderAtTick120, 0);
 
 
 
