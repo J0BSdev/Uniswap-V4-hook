@@ -64,7 +64,7 @@ contract ExecutionGuardHookTest is Test, Deployers {
     // ─── Scenario 1: small trade -> LOW fee ──────────────────────────────────
     function test_smallTrade_chargesLowFee() public {
         // 0.0001 ether against L = 100e18 -> sizeRatioBps ≈ 0.01 -> Low tier.
-        _swap(-0.0002 ether);
+        _swap(-0.0001 ether);
 
         assertEq(uint8(hook.lastTier(poolId)), uint8(Types.RiskTier.Low), "expected Low tier");
         assertEq(hook.lastAppliedFee(poolId), PolicyLib.FEE_LOW, "expected 0.3% fee");
