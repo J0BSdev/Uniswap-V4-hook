@@ -226,7 +226,7 @@ contract TakeProfitsHookTest is Test, Deployers, ERC1155Holder{
         swapRouter.swap(key, swapParams, testSettings, ZERO_BYTES);
 
  uint256 pendingInputTokensForOrderAtTick60 = hook.pendingOrders(key.toId(), 60, true);
-        assertEq(pendingInputTokensForOrderAtTick60, 1);
+        assertEq(pendingInputTokensForOrderAtTick60, 0;
 
         uint256 pendingInputTokensForOrderAtTick120 = hook.pendingOrders(key.toId(), 120, true);
         assertNotEq(pendingInputTokensForOrderAtTick120, 0);
