@@ -120,7 +120,7 @@ contract ExecutionGuardHook is BaseHook {
             referenceSqrtPriceX96: referenceSqrtPriceX96[poolId]
         });
 
-        // 2. Run the risk model (pure) nd ask the policy for a fee (pure).
+        // 2. Run the risk model (pure) and ask the policy for a fee (pure).
         Types.RiskScore memory score = RiskModelLib.computeRiskScore(inputs);
         (uint24 feePips, Types.RiskTier tier) = PolicyLib.decideFee(score.totalScore);
 
