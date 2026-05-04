@@ -30,14 +30,14 @@ contract GasPriceFeesHook is BaseHook {
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
-            beforeInitialize: true,
+            beforeInitialize: true, // validate that our dynamic fees are enabled
             afterInitialize: false,
             beforeAddLiquidity: false,
             beforeRemoveLiquidity: false,
             afterAddLiquidity: false,
             afterRemoveLiquidity: false,
-            beforeSwap: true,
-            afterSwap: true,
+            beforeSwap: true,  //apply our dynamic fees to the swap
+            afterSwap: true, // track the gas price
             beforeDonate: false,
             afterDonate: false,
             beforeSwapReturnDelta: false,
@@ -46,7 +46,7 @@ contract GasPriceFeesHook is BaseHook {
             afterRemoveLiquidityReturnDelta: false
         });
     }
-
+//verify that our pool has dynamic fees enabled
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert _MustUseDynamicFees();
         return BaseHook.beforeInitialize.selector;
