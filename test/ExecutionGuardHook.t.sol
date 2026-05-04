@@ -25,7 +25,7 @@ import {PolicyLib} from "../src/execution-guard/PolicyLib.sol";
 
 /// @notice Three scenarios: small / medium / large trade against the same pool.
 ///         Verifies that ExecutionGuardHook charges Low / Medium / High fees respectively.
-contract ExecutionGuardHookTest is Test, Deployers {
+contract ExecutionGuardHookTest is Test, Deployers 
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolId;
 
