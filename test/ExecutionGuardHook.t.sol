@@ -39,7 +39,7 @@ contract ExecutionGuardHookTest is Test, Deployers {
         // Deterministic hook address that encodes the permission flags we declared.
         address hookAddress = address(
             uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG)
-        );
+        )
         deployCodeTo("ExecutionGuardHook.sol", abi.encode(manager), hookAddress);
         hook = ExecutionGuardHook(hookAddress);
 
