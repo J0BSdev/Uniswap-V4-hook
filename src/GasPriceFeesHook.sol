@@ -46,11 +46,20 @@ contract GasPriceFeesHook is BaseHook {
             afterRemoveLiquidityReturnDelta: false
         });
     }
+
 //verify that our pool has dynamic fees enabled
+
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert _MustUseDynamicFees();
         return BaseHook.beforeInitialize.selector;
     }
+
+
+    //before a swap happens we need to:
+    //get the current gas price
+    //compare the cuurnet gas price with the moving average
+    //calculate the amount of fees that should  be charged on the pool
+    //update the swap fees in the PoolManager
 
     function _beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
         internal
