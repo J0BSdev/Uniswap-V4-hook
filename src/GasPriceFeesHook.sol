@@ -77,6 +77,7 @@ contract GasPriceFeesHook is BaseHook {
         //add our override fee flag onto value
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
+
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
     }
 
@@ -90,13 +91,18 @@ contract GasPriceFeesHook is BaseHook {
     }
 
     function getFee() internal view returns (uint24) {
+        //get the current gas price
         uint128 gasPrice = uint128(tx.gasprice);
+        //compare the current gas price with the moving average gas price
+        //if the gas price > moving average by 10%, half the fees
         if (gasPrice > movingAverageGasPrice * 11 / 10) {
             return BASE_FEES / 2;
         }
+        //if the gas price < moving average by 10%, double the fees
         if (gasPrice < movingAverageGasPrice * 9 / 10) {
             return BASE_FEES * 2;
         }
+        //just return the base fees
         return BASE_FEES;
     }
 
