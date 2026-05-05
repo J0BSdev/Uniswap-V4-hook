@@ -110,7 +110,7 @@ contract GasPriceFeesHook is BaseHook {
         uint128 gasPrice = uint128(tx.gasprice);
         movingAverageGasPrice =
             ((movingAverageGasPrice * movingAverageGasPriceCount) + gasPrice) / (movingAverageGasPriceCount + 1);
-        movingAverageGasPriceCount++;
+        movingAverageGasPriceCount+;
     }
 }
 
