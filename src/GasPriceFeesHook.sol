@@ -87,7 +87,7 @@ contract GasPriceFeesHook is BaseHook {
         returns (bytes4, int128)
     {
         updateMovingAverage();
-        return (BaseHook.afterSwap.selector, 0);
+        return (this.afterSwap.selector, 0);
     }
 
     function getFee() internal view returns (uint24) {
