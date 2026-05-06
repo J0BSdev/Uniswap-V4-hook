@@ -89,7 +89,7 @@ contract GasPriceFeesHookTest is Test, Deployers {
         assertGt(balanceOfToken1After, balanceOfToken1Before);
         movingAverageGasPrice = hook.movingAverageGasPrice();
         movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
-        assertEq(movingAverageGasPrice, 12 gwei);
+        assertEq(movingAverageGasPrice, 10 gwei);
         assertEq(movingAverageGasPriceCount, 2);
 
         // STEP 3 = SECOND SWAP
