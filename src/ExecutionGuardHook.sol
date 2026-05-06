@@ -131,7 +131,8 @@ contract ExecutionGuardHook is BaseHook {
         emit FeeAdjusted(poolId, tier, feePips, score.sizeRatioBps, score.priceDeviationBps, score.totalScore);
 
         // 4. Return the fee with the override flag so the PoolManager uses it for THIS swap only.
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feePips | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+        return
+            (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feePips | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────

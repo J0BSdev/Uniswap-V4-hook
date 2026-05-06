@@ -7,9 +7,9 @@ pragma solidity ^0.8.24;
 library Types {
     /// @notice Tier the current swap was placed in by `PolicyLib.decideFee`.
     enum RiskTier {
-        Low,    // calm pool / small trade  -> low fee
+        Low, // calm pool / small trade  -> low fee
         Medium, // noticeable price impact   -> medium fee
-        High    // big trade or thin pool    -> high fee
+        High // big trade or thin pool    -> high fee
     }
 
     /// @notice Raw inputs the hook collects before each swap.

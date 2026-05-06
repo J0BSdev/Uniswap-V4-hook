@@ -37,9 +37,8 @@ contract ExecutionGuardHookTest is Test, Deployers {
         deployMintAndApprove2Currencies();
 
         // Deterministic hook address that encodes the permission flags we declared.
-        address hookAddress = address(
-            uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG)
-        );
+        address hookAddress =
+            address(uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG));
         deployCodeTo("ExecutionGuardHook.sol", abi.encode(manager), hookAddress);
         hook = ExecutionGuardHook(hookAddress);
 
@@ -95,9 +94,7 @@ contract ExecutionGuardHookTest is Test, Deployers {
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         SwapParams memory params = SwapParams({
-            zeroForOne: true,
-            amountSpecified: amountSpecified,
-            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            zeroForOne: true, amountSpecified: amountSpecified, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         });
 
         swapRouter.swap(key, params, settings, ZERO_BYTES);

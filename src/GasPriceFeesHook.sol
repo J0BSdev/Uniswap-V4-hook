@@ -36,7 +36,7 @@ contract GasPriceFeesHook is BaseHook {
             beforeRemoveLiquidity: false,
             afterAddLiquidity: false,
             afterRemoveLiquidity: false,
-            beforeSwap: true,  //apply our dynamic fees to the swap
+            beforeSwap: true, //apply our dynamic fees to the swap
             afterSwap: true, // track the gas price
             beforeDonate: false,
             afterDonate: false,
@@ -47,13 +47,12 @@ contract GasPriceFeesHook is BaseHook {
         });
     }
 
-//verify that our pool has dynamic fees enabled
+    //verify that our pool has dynamic fees enabled
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert _MustUseDynamicFees();
         return BaseHook.beforeInitialize.selector;
     }
-
 
     //before a swap happens we need to:
     //get the current gas price
@@ -76,7 +75,6 @@ contract GasPriceFeesHook is BaseHook {
 
         //add our override fee flag onto value
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
-
 
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
     }
