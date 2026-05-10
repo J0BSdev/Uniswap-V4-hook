@@ -74,7 +74,7 @@ contract GasPriceFeesHookTest is Test, Deployers {
         uint128 movingAverageGasPrice = hook.movingAverageGasPrice();
         uint104 movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
         assertEq(movingAverageGasPrice, 10 gwei);
-        assertEq(movingAverageGasPriceCount, 1);
+        assertEq(movingAverageGasPriceCount, 1);`
 
         // STEP 2 = FIRST SWAP
         //sell token0 for token1
