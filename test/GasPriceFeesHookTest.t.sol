@@ -105,7 +105,7 @@ contract GasPriceFeesHookTest is Test, Deployers {
 
         assertGt(balanceOfToken1After, balanceOfToken1Before);
 
-        // our moving average should now be ( 10 + 10 + ) / 3 = 8 gwei
+        // our moving average should now be ( 10 + 10 + 4) / 3 = 8 gwei
         movingAverageGasPrice = hook.movingAverageGasPrice();
         movingAverageGasPriceCount = hook.movingAverageGasPriceCount();
 
