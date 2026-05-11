@@ -73,7 +73,7 @@ contract GasPriceFeesHook is BaseHook {
 
         uint24 fee = getFee();
 
-        //add our override fee flag onto value
+        //add our override fee flag ontlue
         uint24 feeWithFlag = fee | LPFeeLibrary.OVERRIDE_FEE_FLAG;
 
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feeWithFlag);
