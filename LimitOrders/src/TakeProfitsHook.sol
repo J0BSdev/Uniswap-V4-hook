@@ -195,9 +195,10 @@ we'll create a black-box magic funstion that font exist
         returns (int24 tickToExecuteAt)
     {
         tickToExecuteAt = getLowerUsableTick(tickToSellAt, key.tickSpacing);
-//Create a pending order
+        //Create a pending order
         pendingOrders[key.toId()][tickToExecuteAt][zeroForOne] += inputAmount;
 
+         //Mint them some claim tokens (ERC1155) 
         uint256 positionId = getPositionId(key, tickToExecuteAt, zeroForOne);
         claimTokenSupply[positionId] += inputAmount;
         _mint(msg.sender, positionId, inputAmount, "");
