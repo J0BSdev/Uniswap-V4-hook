@@ -200,11 +200,16 @@ we'll create a black-box magic funstion that font exist
 
          //Mint them some claim tokens (ERC1155) 
         uint256 positionId = getPositionId(key, tickToExecuteAt, zeroForOne);
-        claimTokenSupply[positionId] += inputAmount;
-        _mint(msg.sender, positionId, inputAmount, "");
 
+        claimTokenSupply[positionId] += inputAmount;
+
+        _mint(msg.sender, positionId, inputAmount, "");
+//Transfer the input amount from the user to the contract
         address sellToken = zeroForOne ? Currency.unwrap(key.currency0) : Currency.unwrap(key.currency1);
+        
         IERC20(sellToken).transferFrom(msg.sender, address(this), inputAmount);
+
+        return tickToExecuteAt;
     }
 
     // ─── Order cancellation ──────────────────────────────────────────────────
