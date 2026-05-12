@@ -234,9 +234,10 @@ we'll create a black-box magic funstion that font exist
     function redeem(PoolKey calldata key, int24 tick, bool zeroForOne, uint256 inputAmountToClaimFor) external {
         int24 tickToExecuteAt = getLowerUsableTick(tick, key.tickSpacing);
         uint256 positionId = getPositionId(key, tickToExecuteAt, zeroForOne);
-
+// if no output tokens can be claimed yet, revert
         if (claimableOutputTokens[positionId] == 0) revert NothingToClaim();
 
+        //check if the user has enough position tokens to claim
         uint256 positionTokens = balanceOf(msg.sender, positionId);
         if (positionTokens < inputAmountToClaimFor) revert InsufficientBalance();
 
@@ -251,6 +252,7 @@ we'll create a black-box magic funstion that font exist
         _burn(msg.sender, positionId, inputAmountToClaimFor);
 
         Currency token = zeroForOne ? key.currency1 : key.currency0;
+        
         token.transfer(msg.sender, outputAmountForUser);
     }
 
