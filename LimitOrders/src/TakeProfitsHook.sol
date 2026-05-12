@@ -230,7 +230,7 @@ we'll create a black-box magic funstion that font exist
     }
 
     // ─── Redemption ──────────────────────────────────────────────────────────
-
+   //2. user wants to claim  their filled order
     function redeem(PoolKey calldata key, int24 tick, bool zeroForOne, uint256 inputAmountToClaimFor) external {
         int24 tickToExecuteAt = getLowerUsableTick(tick, key.tickSpacing);
         uint256 positionId = getPositionId(key, tickToExecuteAt, zeroForOne);
