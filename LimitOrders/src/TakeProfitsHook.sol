@@ -195,7 +195,7 @@ we'll create a black-box magic funstion that font exist
         returns (int24 tickToExecuteAt)
     {
         tickToExecuteAt = getLowerUsableTick(tickToSellAt, key.tickSpacing);
-
+//Create a pending order
         pendingOrders[key.toId()][tickToExecuteAt][zeroForOne] += inputAmount;
 
         uint256 positionId = getPositionId(key, tickToExecuteAt, zeroForOne);
