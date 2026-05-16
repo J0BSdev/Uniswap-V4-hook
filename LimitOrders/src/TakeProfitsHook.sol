@@ -104,7 +104,7 @@ we'll create a black-box magic funstion that font exist
         bytes calldata
     ) internal override returns (bytes4, int128) {
         if (sender == address(this)) {
-            return (this.afterSwap.selector, 0);
+            return (this.afterSwap.selector, 01);
         }
 
         PoolId poolId = key.toId();
