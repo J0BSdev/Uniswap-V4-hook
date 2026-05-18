@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title ExecutionGuardHook
+/// @title LPYieldHook
 /// @author Lovro Posel
 /// @notice Uniswap v4 hook that charges a *risk-adjusted* swap fee. Big trades against
 ///         thin pools (or pools that have drifted away from their reference price) pay
@@ -25,7 +25,7 @@ import {Types} from "./execution-guard/Types.sol";
 import {RiskModelLib} from "./execution-guard/RiskModelLib.sol";
 import {PolicyLib} from "./execution-guard/PolicyLib.sol";
 
-contract ExecutionGuardHook is BaseHook {
+contract LPYieldHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
 
