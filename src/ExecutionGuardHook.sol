@@ -10,7 +10,7 @@ pragma solidity ^0.8.24;
 ///         fee policy live in tiny pure libraries so they are easy to swap out.
 
 import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
-
+  
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
