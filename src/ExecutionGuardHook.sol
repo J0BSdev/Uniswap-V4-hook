@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title ExecutionGuardHook
+/// @title ExecutionGuardHoo
 /// @author Lovro Posel
 /// @notice Uniswap v4 hook that charges a *risk-adjusted* swap fee. Big trades against
 ///         thin pools (or pools that have drifted away from their reference price) pay
