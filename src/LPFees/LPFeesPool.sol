@@ -15,5 +15,5 @@ PoolKey memory poolKey = PoolKey({
     currency1: currency1,
     fee: lpFee,
     tickSpacing: tickSpacing,
-    hooks: hookContract
+    hooks: hook
 });
