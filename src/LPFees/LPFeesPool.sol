@@ -14,6 +14,7 @@ PoolKey memory poolKey = PoolKey({
     currency0: currency0,
     currency1: currency1,
     fee: lpFee,
-    tickSpacing: tickSpacing,
-    hooks: hookContract
+    tickSpacing: tickSpacing
 });
+
+poolManager.createPool(poolKey);
