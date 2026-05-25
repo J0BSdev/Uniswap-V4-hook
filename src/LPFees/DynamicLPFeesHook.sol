@@ -9,5 +9,5 @@ import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 contract DynamicLPFeesHook is BaseHook {
-    constructor(IPoolManager poolManager) BaseHook(poolManager) {}
-}
+    constructor(IPoolManager poolManager) BaseHook(poolManager) 
+} 
