@@ -6,6 +6,7 @@ pragma solidity ^0.8.24;
 /// @notice Uniswap v4 hook that charges a dynamic fee based on the liquidity of the pool.
 
 import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
+import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 
 contract DynamicLPFeesHook is BaseHook {
     constructor(IPoolManager poolManager) BaseHook(poolManager) {}
