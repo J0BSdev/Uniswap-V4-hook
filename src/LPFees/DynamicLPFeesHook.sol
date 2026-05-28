@@ -7,6 +7,14 @@ pragma solidity ^0.8.24;
 
 import {BaseHook} from "../lib/v4-hooks-public/src/base/BaseHook.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
+import {LPFeeLibrary} from "../lib/LPFeeLibrary.sol";
+import {StatsLibrary} from "../lib/StatsLibrary.sol";
+import {SwapParams} from "@uniswap/v4-core/src/libraries/SwapParams.sol";
+import {PoolKey,PoolId} from "@uniswap/v4-core/src/libraries/PoolKey.sol";
+import {BeforeSwapDelta} from "@uniswap/v4-core/src/libraries/BeforeSwapDelta.sol";
+
 
 contract DynamicLPFeesHook is BaseHook {
         constructor(IPoolManager poolManager) BaseHook(poolManager) {}
