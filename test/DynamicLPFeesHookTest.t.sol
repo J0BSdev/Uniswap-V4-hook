@@ -19,17 +19,17 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
-import {ExecutionGuardHook} from "../src/ExecutionGuardHook.sol";
+import {DynamicLPFeesHook} from "../src/LPFees/DynamicLPFeesHook.sol";
 import {Types} from "../src/execution-guard/Types.sol";
 import {PolicyLib} from "../src/execution-guard/PolicyLib.sol";
 
 /// @notice Three scenarios: small / medium / large trade against the same pool.
-///         Verifies that ExecutionGuardHook charges Low / Medium / High fees respectively.
-contract LPYieldHookTest is Test, Deployers {
+///         Verifies that DynamicLPFeesHook charges Low / Medium / High fees respectively.
+contract DynamicLPFeesHookTest is Test, Deployers {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolId;
 
-    LPYieldHook hook;
+    DynamicLPFeesHook hook;
     PoolId poolId;
 
     function setUp() public {
@@ -39,8 +39,8 @@ contract LPYieldHookTest is Test, Deployers {
         // Deterministic hook address that encodes the permission flags we declared.
         address hookAddress =
             address(uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG));
-        deployCodeTo("LPYieldHook.sol", abi.encode(manager), hookAddress);
-        hook = LPYieldHook(hookAddress);
+        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager), hookAddress);
+        hook = DynamicLPFeesHook(hookAddress);
 
         // Pool MUST be opened as dynamic-fee for the hook's override fee to take effect.
         (key,) = initPool(currency0, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, SQRT_PRICE_1_1);
