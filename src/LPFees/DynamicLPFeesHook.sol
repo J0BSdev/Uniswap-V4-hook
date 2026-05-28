@@ -8,6 +8,7 @@ pragma solidity ^0.8.24;
 
 import {BaseHook} from "v4-hooks-public/src/base/BaseHook.sol";
 
+import {PoolIdLibrary} from "v4-core/src/libraries/PoolIdLibrary.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
@@ -23,6 +24,8 @@ import {RiskModelLib} from "../execution-guard/RiskModelLib.sol";
 import {PolicyLib} from "../execution-guard/PolicyLib.sol";
 
 contract DynamicLPFeesHook is BaseHook {
+
+    using PoolIdLibrary for PoolKey;    
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
 
