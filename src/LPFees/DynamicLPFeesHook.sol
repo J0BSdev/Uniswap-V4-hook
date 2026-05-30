@@ -113,7 +113,7 @@ contract DynamicLPFeesHook is BaseHook {
         uint128 liquidity = poolManager.getLiquidity(poolId);
 
         Types.RiskInputs memory inputs = Types.RiskInputs({
-            tradeSize: _(params.amountSpecified),
+            tradeSize: _abs(params.amountSpecified),
             liquidity: liquidity,
             sqrtPriceX96: sqrtPriceX96,
             referenceSqrtPriceX96: referenceSqrtPriceX96[poolId]
