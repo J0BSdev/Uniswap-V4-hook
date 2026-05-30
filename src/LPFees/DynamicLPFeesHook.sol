@@ -104,6 +104,8 @@ contract DynamicLPFeesHook is BaseHook {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
+
+
         PoolId poolId = key.toId();
 
         // 1. Gather raw inputs from the live pool state.
