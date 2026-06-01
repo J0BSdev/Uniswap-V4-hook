@@ -25,7 +25,7 @@ library RiskModelLib {
 
         // Combine: size carries full weight, deviation contributes a fraction.
         // Both inputs are already capped at MAX_BPS, so totalScore <= MAX_BPS * 1.25.
-        score.totalScore = score.sizeRatioBps + (score.priceDeviationBps / DEVIATION_WEIGHT_DEN);
+       
     }
 
     /// @dev Trade size as a fraction of in-range liquidity, expressed in bps.
