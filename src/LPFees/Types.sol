@@ -2,22 +2,18 @@
 pragma solidity ^0.8.24;
 
 /// @title Types
-/// @notice Shared structs / enums used by ExecutionGuardHook, RiskModelLib and PolicyLib.
-/// @dev Kept deliberately small so that the risk model is easy to reason about.
+/// @notice Data shapes shared between DynamicLPFeesHook, RiskModelLib and PolicyLib.
 library Types {
-    /// @notice Tier the current swap was placed in by `PolicyLib.decideFee`.
     enum RiskTier {
-        Low, // calm pool / small trade  -> low fee
-        Medium, // noticeable price impact   -> medium fee
-        High // big trade or thin pool    -> high fee
+        Low,
+        Medium,
+        High
     }
 
-    /// @notice Raw inputs the hook collects before each swap.
-    /// @param tradeSize              Absolute notional of the swap (|amountSpecified|).
-    /// @param liquidity              Active in-range liquidity reported by the pool.
-    /// @param sqrtPriceX96           Current pool price (Q64.96).
-    /// @param referenceSqrtPriceX96  Reference price (e.g. price at pool initialization)
-    ///                               used to estimate how far the pool has drifted.
+    /// @param tradeSize Absolute swap size (|amountSpecified|).
+    /// @param liquidity In-range pool liquidity at swap time.
+    /// @param sqrtPriceX96 Current sqrt price.
+    /// @param referenceSqrtPriceX96 Sqrt price stored when the pool was initialized.
     struct RiskInputs {
         uint256 tradeSize;
         uint128 liquidity;
@@ -25,10 +21,9 @@ library Types {
         uint160 referenceSqrtPriceX96;
     }
 
-    /// @notice Output of the risk model.
-    /// @param sizeRatioBps       Trade size as a fraction of pool liquidity, in bps.
-    /// @param priceDeviationBps  |currentSqrt - refSqrt| / refSqrt, in bps.
-    /// @param totalScore         Weighted aggregate score (bps-like). Bigger == riskier.
+    /// @param sizeRatioBps Swap size relative to liquidity, in bps.
+    /// @param priceDeviationBps Distance from the reference sqrt price, in bps.
+    /// @param totalScore Combined risk score passed into PolicyLib.
     struct RiskScore {
         uint256 sizeRatioBps;
         uint256 priceDeviationBps;
