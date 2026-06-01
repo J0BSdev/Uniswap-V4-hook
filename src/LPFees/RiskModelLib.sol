@@ -14,8 +14,7 @@ library RiskModelLib {
 
     /// @notice Weight applied to price deviation when combining it with size.
     ///         Size dominates; deviation contributes a quarter of its bps value.
-    uint256 internal constant DEVIATION_WEIGHT_DEN = 4;
-
+    uint256 internal constant 
     /// @notice Compute the risk score for a candidate swap.
     /// @param i Raw inputs (see Types.RiskInputs).
     /// @return score Aggregated score plus its sub-components.
