@@ -26,10 +26,10 @@ contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
 
-    // ─── Errors ──────────────────────────────────────────────────────────────
+    
     error MustUseDynamicFees();
 
-    // ─── Events ──────────────────────────────────────────────────────────────
+   
     event FeeAdjusted(
         PoolId indexed poolId,
         Types.RiskTier tier,
@@ -39,7 +39,7 @@ contract DynamicLPFeesHook is BaseHook {
         uint256 totalScore
     );
 
-    // ─── Per-pool state ──────────────────────────────────────────────────────
+    
 
     /// @notice Reference sqrt price captured at pool initialization. The risk model
     ///         compares the live price against this to estimate "drift" / volatility.
@@ -54,11 +54,10 @@ contract DynamicLPFeesHook is BaseHook {
     /// @notice Last full risk score (size + deviation breakdown).
     mapping(PoolId => Types.RiskScore) public lastScore;
 
-    // ─── Constructor ─────────────────────────────────────────────────────────
 
     constructor(IPoolManager _manager) BaseHook(_manager) {}
 
-    // ─── Permissions ─────────────────────────────────────────────────────────
+   
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -79,8 +78,6 @@ contract DynamicLPFeesHook is BaseHook {
         });
     }
 
-    // ─── Hook callbacks ──────────────────────────────────────────────────────
-
     /// @dev Pool MUST be opened with `LPFeeLibrary.DYNAMIC_FEE_FLAG`, otherwise the
     ///      override fee returned by `_beforeSwap` would be silently ignored.
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
@@ -88,7 +85,7 @@ contract DynamicLPFeesHook is BaseHook {
         return BaseHook.beforeInitialize.selector;
     }
 
-    /// @dev Snapshot the initial price as the deviation reference.
+    
     function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
         internal
         override
@@ -134,10 +131,9 @@ contract DynamicLPFeesHook is BaseHook {
             (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feePips | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     /// @dev Absolute value of a v4 amountSpecified (negative = exactInput, positive = exactOutput).
     function _abs(int256 x) private pure returns (uint256) {
-        return x < 0 ? uint256(-x) : uint256(x);
+        
     }
 }
