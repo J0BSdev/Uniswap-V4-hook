@@ -23,10 +23,6 @@ library RiskModelLib {
 
     function _priceDeviationBps(uint160 sqrtPriceX96, uint160 refSqrtPriceX96) private pure returns (uint256) {
         if (refSqrtPriceX96 == 0) return 0;
-        uint256 cur = uint256(sqrtPriceX96);
-        uint256 ref = uint256(refSqrtPriceX96);
-        uint256 diff = cur > ref ? cur - ref : ref - cur;
-        uint256 dev = (diff * MAX_BPS) / ref;
-        return dev > MAX_BPS ? MAX_BPS : dev;
+       
     }
 }
