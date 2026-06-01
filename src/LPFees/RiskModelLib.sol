@@ -32,8 +32,6 @@ library RiskModelLib {
     ///      If liquidity is zero we treat the pool as "infinitely risky".
     function _sizeRatioBps(uint256 tradeSize, uint128 liquidity) private pure returns (uint256) {
         if (liquidity == 0) return MAX_BPS;
-        uint256 ratio = (tradeSize * MAX_BPS) / uint256(liquidity);
-        return ratio > MAX_BPS ? MAX_BPS : ratio;
     }
 
     /// @dev How far the current sqrt price has drifted from the reference, in bps.
