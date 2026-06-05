@@ -41,10 +41,8 @@ AggregatorV3Interface internal PriceDataFeed;
         PriceDataFeed = AggregatorV3Interface(_dataFeed);
     }
 
- function getHistoricalData(
-    uint80 roundId
-  ) internal view returns (int256) {
-    (,int256 answer,,,) = PriceDataFeed.getRoundData(roundId);
+ function getHistoricalData() internal view returns (int256) {
+    (,int256 answer,,,) = PriceDataFeed.latestRoundData();
     return answer;
   }
 
@@ -95,9 +93,9 @@ AggregatorV3Interface internal PriceDataFeed;
 
     (, int256 answer,, uint256 updatedAt,) = PriceDataFeed.latestRoundData();
 
-    int256 historicalData = getHistoricalData(updatedAt);
+    int256 historicalData = getHistoricalData();
         
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee | LpFeeLibrary.OVERRIDE_FEE_FLAG);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, key.fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
     
 }
