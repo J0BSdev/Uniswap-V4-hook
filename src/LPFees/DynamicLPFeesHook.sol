@@ -18,7 +18,7 @@ import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-contract DynamicLPFeesHook is BaseHook, AggregatorV3Interface {
+contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
 
@@ -33,9 +33,13 @@ contract DynamicLPFeesHook is BaseHook, AggregatorV3Interface {
         uint256 totalScore
     );
 
+
+AggregatorV3Interface internal PriceDataFeed;
     
 
-    constructor(IPoolManager _manager) BaseHook(_manager) {}
+    constructor(IPoolManager _manager, address _dataFeed) BaseHook(_manager) {
+        PriceDataFeed = AggregatorV3Interface(_dataFeed);
+    }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -109,51 +113,4 @@ contract DynamicLPFeesHook is BaseHook, AggregatorV3Interface {
         if (value > max) return max;
         return value;
     }
-
-
-
-/**
- * THIS IS AN EXAMPLE CONTRACT THAT USES HARDCODED
- * VALUES FOR CLARITY.
- * THIS IS AN EXAMPLE CONTRACT THAT USES UN-AUDITED CODE.
- * DO NOT USE THIS CODE IN PRODUCTION.
- */
-
-/**
- * If you are reading data feeds on L2 networks, you must
- * check the latest answer from the L2 Sequencer Uptime
- * Feed to ensure that the data is accurate in the event
- * of an L2 sequencer outage. See the
- * https://docs.chain.link/data-feeds/l2-sequencer-feeds
- * page for details.
- *
-
-
-  /**
-   * Network: Sepolia
-   * Aggregator: BTC/USD
-   * Address: 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
-   */
-  constructor() {
-    dataFeed = AggregatorV3Interface();
-  }
-
-  /**
-   * Returns the latest answer.
-   */
-  function getChainlinkDataFeedLatestAnswer() public view returns (int256) {
-    // prettier-ignore
-    (
-      /* uint80 roundId */
-      ,
-      int256 answer,
-      /*uint256 startedAt*/
-      ,
-      /*uint256 updatedAt*/
-      ,
-      /*uint80 answeredInRound*/
-    ) = dataFeed.latestRoundData();
-    return answer;
-  }
 }
-

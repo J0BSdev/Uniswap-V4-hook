@@ -37,3 +37,4 @@ v3-core/=lib/v4-hooks-public/lib/protocol-fees/lib/v3-core/
 v4-core/=lib/v4-hooks-public/lib/v4-core/src/
 v4-hooks-public/=lib/v4-hooks-public/
 v4-periphery/=lib/v4-hooks-public/lib/v4-periphery/
+@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/
