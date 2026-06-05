@@ -43,7 +43,7 @@ AggregatorV3Interface internal PriceDataFeed;
 
  function getHistoricalData(
     uint80 roundId
-  ) internal pure returns (int256) {
+  ) internal view returns (int256) {
     (,int256 answer,,,) = PriceDataFeed.getRoundData(roundId);
     return answer;
   }
@@ -73,12 +73,13 @@ AggregatorV3Interface internal PriceDataFeed;
         return BaseHook.beforeInitialize.selector;
     }
 
-    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, uint24 fee)
+    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
         internal
         override
         returns (bytes4)
+
     {
-        return (BaseHook.afterInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA);
+        return BaseHook.afterInitialize.selector;
         
     }
 
@@ -93,8 +94,10 @@ AggregatorV3Interface internal PriceDataFeed;
         // This cannot be manipulated within a single transaction
 
     (, int256 answer,, uint256 updatedAt,) = PriceDataFeed.latestRoundData();
+
+    int256 historicalData = getHistoricalData(updatedAt);
         
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, key.fee);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee | LpFeeLibrary.OVERRIDE_FEE_FLAG);
     }
     
 }
