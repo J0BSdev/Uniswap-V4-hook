@@ -41,7 +41,7 @@ AggregatorV3Interface internal PriceDataFeed;
         PriceDataFeed = AggregatorV3Interface(_dataFeed);
     }
 
- function getHistoricalData() internal view returns (int256) {
+ function getLatestPrice() internal view returns (int256) {
     (,int256 answer,,,) = PriceDataFeed.latestRoundData();
     return answer;
   }
@@ -91,9 +91,8 @@ AggregatorV3Interface internal PriceDataFeed;
         // Use time-weighted average price from trusted oracle
         // This cannot be manipulated within a single transaction
 
-    (, int256 answer,, uint256 updatedAt,) = PriceDataFeed.latestRoundData();
+    int256 latestPrice = getLatestPrice();
 
-    int256 historicalData = getHistoricalData();
         
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, key.fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
