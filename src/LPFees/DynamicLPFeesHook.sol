@@ -21,6 +21,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
+    using AggregatorV3Interface for PriceDataFeed;
 
 
     error MustUseDynamicFees();
@@ -41,16 +42,15 @@ AggregatorV3Interface internal PriceDataFeed;
         PriceDataFeed = AggregatorV3Interface(_dataFeed);
     }
 
- function getLatestPrice() internal view returns (int256) {
+
+
+    function getLatestPrice()
+    internal
+    view
+    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) {
     (,int256 answer,,,) = PriceDataFeed.latestRoundData();
-    return answer;
-    }
-
-    function getHistoricalPrice() internal view returns (int256) {
-    (,int256 answer,,,) = PriceDataFeed.getRoundData(PriceDataFeed.latestRoundData().);
-    return answer;
-    }
-
+    return (roundId, answer, startedAt, updatedAt, answeredInRound);
+}
 
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
@@ -82,9 +82,10 @@ AggregatorV3Interface internal PriceDataFeed;
         override
         returns (bytes4)
 
-        uint24 historicalFee = getHistoricalPrice();
+        PoolId poolId = key.toId();
+        uint24  = getHistoricalFee(poolId);
         return BaseHook.afterInitialize.selector;
-
+    }
 
     function _beforeSwap (
         address sender,
@@ -97,7 +98,7 @@ AggregatorV3Interface internal PriceDataFeed;
     int256 latestPrice = getLatestPrice();
 
         
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, key.fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA,| LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
     
 }
