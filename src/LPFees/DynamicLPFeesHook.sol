@@ -41,6 +41,14 @@ AggregatorV3Interface internal PriceDataFeed;
         PriceDataFeed = AggregatorV3Interface(_dataFeed);
     }
 
+ function getHistoricalData(
+    uint80 roundId
+  ) internal pure returns (int256) {
+    (,int256 answer,,,) = PriceDataFeed.getRoundData(roundId);
+    return answer;
+  }
+
+
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: true,
@@ -62,7 +70,7 @@ AggregatorV3Interface internal PriceDataFeed;
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
-        return BaseHook.beforeInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee;
+        return BaseHook.beforeInitialize.selector;
     }
 
     function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, uint24 fee)
@@ -70,7 +78,7 @@ AggregatorV3Interface internal PriceDataFeed;
         override
         returns (bytes4)
     {
-        return (BaseHook.afterInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
+        return (BaseHook.afterInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA);
         
     }
 
@@ -80,37 +88,13 @@ AggregatorV3Interface internal PriceDataFeed;
         SwapParams calldata params,
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
+
         // Use time-weighted average price from trusted oracle
         // This cannot be manipulated within a single transaction
-        uint256 twapPrice = priceOracle.getTWAP(
-            key.currency0,
-            key.currency1,
-            OBSERVATION_PERIOD  // 1 hour TWAP
-        );
+
+    (, int256 answer,, uint256 updatedAt,) = PriceDataFeed.latestRoundData();
         
-        // Calculate volatility from historical data, not current state
-        uint256 historicalVolatility = _getHistoricalVolatility(key);
-        
-        // Scale fee based on volatility
-        uint24 dynamicFee = BASE_FEE;
-        if (historicalVolatility > HIGH_VOLATILITY_THRESHOLD) {
-            dynamicFee = BASE_FEE * 2;  // Double fee during high volatility
-        } else if (historicalVolatility < LOW_VOLATILITY_THRESHOLD) {
-            dynamicFee = BASE_FEE / 2;  // Half fee during calm periods
-        }
-        
-        // ALWAYS bound the fee to prevent extreme values
-        dynamicFee = uint24(_bound(dynamicFee, MIN_FEE, MAX_FEE));
-        
-        // Update observations for future calculations
-        _recordObservation(params);
-        
-        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, dynamicFee);
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, key.fee);
     }
     
-    function _bound(uint256 value, uint256 min, uint256 max) internal pure returns (uint256) {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
 }
