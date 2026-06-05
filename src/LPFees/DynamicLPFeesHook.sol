@@ -44,7 +44,13 @@ AggregatorV3Interface internal PriceDataFeed;
  function getLatestPrice() internal view returns (int256) {
     (,int256 answer,,,) = PriceDataFeed.latestRoundData();
     return answer;
-  }
+    }
+
+    function getHistoricalPrice() internal view returns (int256) {
+    (,int256 answer,,,) = PriceDataFeed.getRoundData(PriceDataFeed.latestRoundData().);
+    return answer;
+    }
+
 
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
@@ -76,21 +82,18 @@ AggregatorV3Interface internal PriceDataFeed;
         override
         returns (bytes4)
 
-    {
+        uint24 historicalFee = getHistoricalPrice();
         return BaseHook.afterInitialize.selector;
-        
-    }
+
 
     function _beforeSwap (
         address sender,
         PoolKey calldata key,
         SwapParams calldata params,
         bytes calldata hookData
-    ) internal override returns (bytes4, BeforeSwapDelta, uint24) {
-
+    ) internal override returns (bytes4, BeforeSwapDelta, uint24 historicalFee) {
         // Use time-weighted average price from trusted oracle
         // This cannot be manipulated within a single transaction
-
     int256 latestPrice = getLatestPrice();
 
         
