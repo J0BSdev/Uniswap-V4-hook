@@ -16,20 +16,17 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-import {Types} from "./Types.sol";
-import {RiskModelLib} from "./RiskModelLib.sol";
-import {PolicyLib} from "./PolicyLib.sol";
-
-contract DynamicLPFeesHook is BaseHook {
+contract DynamicLPFeesHook is BaseHook, AggregatorV3Interface {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
+
 
     error MustUseDynamicFees();
 
     event FeeAdjusted(
         PoolId indexed poolId,
-        Types.RiskTier tier,
         uint24 feePips,
         uint256 sizeRatioBps,
         uint256 priceDeviationBps,
@@ -68,7 +65,8 @@ contract DynamicLPFeesHook is BaseHook {
         internal
         override
         returns (bytes4)
-        
+    {
+        return BaseHook.afterInitialize.selector;
         
     }
 
@@ -111,4 +109,51 @@ contract DynamicLPFeesHook is BaseHook {
         if (value > max) return max;
         return value;
     }
+
+
+
+/**
+ * THIS IS AN EXAMPLE CONTRACT THAT USES HARDCODED
+ * VALUES FOR CLARITY.
+ * THIS IS AN EXAMPLE CONTRACT THAT USES UN-AUDITED CODE.
+ * DO NOT USE THIS CODE IN PRODUCTION.
+ */
+
+/**
+ * If you are reading data feeds on L2 networks, you must
+ * check the latest answer from the L2 Sequencer Uptime
+ * Feed to ensure that the data is accurate in the event
+ * of an L2 sequencer outage. See the
+ * https://docs.chain.link/data-feeds/l2-sequencer-feeds
+ * page for details.
+ *
+
+
+  /**
+   * Network: Sepolia
+   * Aggregator: BTC/USD
+   * Address: 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
+   */
+  constructor() {
+    dataFeed = AggregatorV3Interface();
+  }
+
+  /**
+   * Returns the latest answer.
+   */
+  function getChainlinkDataFeedLatestAnswer() public view returns (int256) {
+    // prettier-ignore
+    (
+      /* uint80 roundId */
+      ,
+      int256 answer,
+      /*uint256 startedAt*/
+      ,
+      /*uint256 updatedAt*/
+      ,
+      /*uint80 answeredInRound*/
+    ) = dataFeed.latestRoundData();
+    return answer;
+  }
 }
+

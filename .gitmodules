@@ -10,3 +10,6 @@
 [submodule "lib/v4-hooks-public"]
 	path = lib/v4-hooks-public
 	url = https://github.com/Uniswap/v4-hooks-public
+[submodule "lib/chainlink"]
+	path = lib/chainlink
+	url = https://github.com/smartcontractkit/chainlink

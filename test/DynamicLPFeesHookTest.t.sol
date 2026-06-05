@@ -20,8 +20,7 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import {DynamicLPFeesHook} from "../src/LPFees/DynamicLPFeesHook.sol";
-import {Types} from "../src/LPFees/Types.sol";
-import {PolicyLib} from "../src/LPFees/PolicyLib.sol";
+
 
 /// @notice Three scenarios: small / medium / large trade against the same pool.
 ///         Verifies that DynamicLPFeesHook charges Low / Medium / High fees respectively.
