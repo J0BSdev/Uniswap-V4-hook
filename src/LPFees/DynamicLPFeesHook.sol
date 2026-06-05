@@ -62,15 +62,15 @@ AggregatorV3Interface internal PriceDataFeed;
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
-        return BaseHook.beforeInitialize.selector;
+        return BaseHook.beforeInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee;
     }
 
-    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
+    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, uint24 fee)
         internal
         override
         returns (bytes4)
     {
-        return BaseHook.afterInitialize.selector;
+        return (BaseHook.afterInitialize.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
         
     }
 
