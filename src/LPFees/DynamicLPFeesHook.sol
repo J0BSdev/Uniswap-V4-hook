@@ -71,41 +71,4 @@ contract DynamicLPFeesHook is BaseHook {
         internal
         override
         returns (bytes4)
-    {
-        referenceSqrtPriceX96[key.toId()] = sqrtPriceX96;
-        return BaseHook.afterInitialize.selector;
-    }
-
-    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
-        internal
-        override
-        returns (bytes4, BeforeSwapDelta, uint24)
-    {
-        PoolId poolId = key.toId();
-
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-        uint128 liquidity = poolManager.getLiquidity(poolId);
-
-        Types.RiskInputs memory inputs = Types.RiskInputs({
-            tradeSize: _abs(params.amountSpecified),
-            liquidity: liquidity,
-            sqrtPriceX96: sqrtPriceX96,
-            referenceSqrtPriceX96: referenceSqrtPriceX96[poolId]
-        });
-
-        Types.RiskScore memory score = RiskModelLib.computeRiskScore(inputs);
-        (uint24 feePips, Types.RiskTier tier) = PolicyLib.decideFee(score.totalScore);
-
-        lastAppliedFee[poolId] = feePips;
-        lastTier[poolId] = tier;
-        lastScore[poolId] = score;
-        emit FeeAdjusted(poolId, tier, feePips, score.sizeRatioBps, score.priceDeviationBps, score.totalScore);
-
-        return
-            (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, feePips | LPFeeLibrary.OVERRIDE_FEE_FLAG);
-    }
-
-    function _abs(int256 x) private pure returns (uint256) {
-        return x < 0 ? uint256(-x) : uint256(x);
-    }
-}
+    
