@@ -86,22 +86,7 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
     uint256 totalScore = deviationBps + tradeSizeBps;
     //return the fee
     return totalScore;
-}
 
-
-    if (deviationBps < 100) {
-        return LOW_FEE;
-    }
-
-    if (deviationBps < 300) {
-        return MEDIUM_FEE;
-    }
-
-    if (deviationBps < 500) {
-        return HIGH_FEE;
-    }
-
-    return MAX_FEE;
 }
 
 
@@ -145,7 +130,7 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         // Get the pool id
         PoolId poolId = key.toId();
         // Get the latest round data from the Chainlink price feed
-        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+        
         // Store the reference price in the mapping
         referencePrice[poolId] = currentPrice;
         // Return the selector for the afterInitialize function
@@ -159,14 +144,13 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
         // Get the pool id
-           PoolId poolId = key.toId();
-           // Get the fee
-           uint24 fee = getFee(poolId, params);
-           // Return the selector for the beforeSwap function and the fee
-           return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
-
-
-       
+        PoolId poolId = key.toId();
+        // Get the latest round data from the Chainlink price feed
+        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+        // Get the fee based on the pool id and the swap params
+        uint24 fee = getFee(poolId,params);
+        // Return the selector for the beforeSwap function and the fee
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
     
 }
