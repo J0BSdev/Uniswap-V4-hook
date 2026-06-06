@@ -22,6 +22,21 @@ contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
 
+
+    uint256 public constant MIN_FEE = 3000; //0.3%
+    uint256 public constant LOW_FEE = 5000; //5%
+    uint256 public constant MEDIUM_FEE = 10000; //1%
+    uint256 public constant HIGH_FEE = 30000; //3%
+    uint256 public constant VERY_HIGH_FEE = 50000; //5%
+    uint256 public constant MAX_FEE = 100000; //10%
+
+mapping(PoolId => uint256 count) public beforeSwapCount;
+    mapping(PoolId => uint256 count) public afterSwapCount;
+    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
+    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+    mapping(PoolId => int256) public referencePrice;
+
+
     error MustUseDynamicFees();
 
     event FeeAdjusted(
@@ -31,6 +46,9 @@ contract DynamicLPFeesHook is BaseHook {
         uint256 priceDeviationBps,
         uint256 totalScore
     );
+
+
+
 
 
 AggregatorV3Interface internal PriceDataFeed;
@@ -49,6 +67,26 @@ function latestRoundData()
   return PriceDataFeed.latestRoundData();
 }
 
+
+function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
+    internal
+    pure
+    returns (uint24)
+{
+    if (deviationBps < 100) {
+        return LOW_FEE;
+    }
+
+    if (deviationBps < 300) {
+        return MEDIUM_FEE;
+    }
+
+    if (deviationBps < 500) {
+        return HIGH_FEE;
+    }
+
+    return MAX_FEE;
+}
 
 
 
@@ -72,20 +110,25 @@ function latestRoundData()
     }
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
+
+        // Just to check if the fee is dynamic,if not, revert
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
-        return BaseHook.beforeInitialize.selector;
+        return this.beforeInitialize.selector;
+
     }
 
+    /// @notice Stores the Chainlink reference price when a dynamic-fee pool is initialized.
+    /// @dev Called once per pool by the PoolManager after `initialize`. The stored price is used
+    ///      in `_beforeSwap` to compute oracle deviation for dynamic fee tiers.
     function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
         internal
         override
         returns (bytes4)
-    {
+        {
         PoolId poolId = key.toId();
-
         (, int256 answer,,,) = PriceDataFeed.latestRoundData();
-
-        return BaseHook.afterInitialize.selector;
+        referencePrice[poolId] = answer;
+        return this.afterInitialize.selector;
     }
 
     function _beforeSwap(
