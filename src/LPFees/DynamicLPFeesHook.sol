@@ -37,7 +37,7 @@ contract DynamicLPFeesHook is BaseHook {
     error MustUseDynamicFees();
     error CurrentOraclePriceNotSet();
     error ReferencePriceNotSet();
-    error PoolIdNotSet();
+    error PoolPriceNotSet();
 
     event FeeAdjusted(
         PoolId indexed poolId,
@@ -68,29 +68,36 @@ function latestRoundData()
 
 function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24){
     // Get the latest round data from the Chainlink price feed
-    if (poolId == 0) revert PoolIdNotSet();
     (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
     if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
-    //get the reference price from the mapping
-    if (referencePrice[poolId] == 0) revert ReferencePriceNotSet();
-    uint256 poolPrice = getPoolPriceFromSqrtPriceX96(key.sqrtPriceX96);
-    //calculate the deviation between the current price and the reference price
-    int256 deviation = currentOraclePrice - refPrice;
-    //calculate the deviation in basis points  
-    uint256 deviationBps = deviation * 10000 / refPrice;
-    //calculate the trade size in basis points
-    uint256 tradeSizeBps = params.amountSpecified * 10000 / liquidity;
-    //calculate the total score
-    uint256 totalScore = deviationBps + tradeSizeBps;
-    //return the fee
-    if (totalScore < MIN_FEE) return MIN_FEE;
-    if (totalScore < LOW_FEE) return LOW_FEE;
-    if (totalScore < MEDIUM_FEE) return MEDIUM_FEE;
-    if (totalScore < HIGH_FEE) return HIGH_FEE;
-    if (totalScore < VERY_HIGH_FEE) return VERY_HIGH_FEE;
-    return MAX_FEE;
 
+    // get the pool price from the sqrtPriceX96
+    (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolId);
+    uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
+    if (poolPrice == 0) revert PoolPriceNotSet();
+
+//get the oracle price
+  uint256 oraclePrice = uint256(currentOraclePrice);
+
+    uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
+    uint256 priceDeviationBps = diff * 10000 / oraclePrice;
+
+    // --- size / liquidity ---
+    uint256 tradeSize = params.amountSpecified >= 0
+        ? uint256(params.amountSpecified)
+        : uint256(-params.amountSpecified);
+    // --- score → fee ---
+    uint256 totalScore = priceDeviationBps + sizeRatioBps;
+    if (totalScore < 100)       feePips = LOW_FEE;
+    else if (totalScore < 500)  feePips = MEDIUM_FEE;
+    else if (totalScore < 2000) feePips = HIGH_FEE;
+    else                        feePips = VERY_HIGH_FEE;
+    if (feePips < MIN_FEE) feePips = MIN_FEE;
+    if (feePips > MAX_FEE) feePips = MAX_FEE;
 }
+
+ 
+
 
 
 
