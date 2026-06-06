@@ -21,18 +21,18 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
-    using PoolId for PoolKey;
 
 
-    uint256 public constant MIN_FEE = 3000; //0.3%
-    uint256 public constant LOW_FEE = 5000; //5%
-    uint256 public constant MEDIUM_FEE = 10000; //1%
-    uint256 public constant HIGH_FEE = 30000; //3%
-    uint256 public constant VERY_HIGH_FEE = 50000; //5%
-    uint256 public constant MAX_FEE = 100000; //10%
+    uint24 public constant MIN_FEE = 3000; //0.3%
+    uint24 public constant LOW_FEE = 5000; //0.5%
+    uint24 public constant MEDIUM_FEE = 10000; //1%
+    uint24 public constant HIGH_FEE = 30000; //3%
+    uint24 public constant VERY_HIGH_FEE = 50000; //5%
+    uint24 public constant MAX_FEE = 100000; //10%
 
 
-    mapping(PoolId => int256) public referencePrice;
+    mapping(PoolId poolId => int256 referencePrice) public referencePrice;
+    mapping(PoolId poolId => int24 lastKnownTick) public lastKnownTick;
 
 
     error MustUseDynamicFees();
@@ -73,19 +73,22 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
     (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
     //get the reference price from the mapping
     if (referencePrice[poolId] == 0) revert ReferencePriceNotSet();
-    int256 referencePrice = referencePrice[poolId];
+    int256 refPrice = referencePrice[poolId];
     //calculate the deviation between the current price and the reference price
-    if (currentPrice == 0) revert CurrentPriceNotSet();
-    int256 deviation = currentPrice - referencePrice;
+    int256 deviation = currentPrice - refPrice;
     //calculate the deviation in basis points  
-    if (deviation == 0) revert DeviationNotSet();
-    uint256 deviationBps = deviation * 10000 / referencePrice;
+    uint256 deviationBps = deviation * 10000 / refPrice;
     //calculate the trade size in basis points
     uint256 tradeSizeBps = params.amountSpecified * 10000 / liquidity;
     //calculate the total score
     uint256 totalScore = deviationBps + tradeSizeBps;
     //return the fee
-    return totalScore;
+    if (totalScore < MIN_FEE) return MIN_FEE;
+    if (totalScore < LOW_FEE) return LOW_FEE;
+    if (totalScore < MEDIUM_FEE) return MEDIUM_FEE;
+    if (totalScore < HIGH_FEE) return HIGH_FEE;
+    if (totalScore < VERY_HIGH_FEE) return VERY_HIGH_FEE;
+    return MAX_FEE;
 
 }
 
@@ -126,11 +129,10 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         override
         returns (bytes4)
         {
-            //
         // Get the pool id
         PoolId poolId = key.toId();
         // Get the latest round data from the Chainlink price feed
-        
+        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
         // Store the reference price in the mapping
         referencePrice[poolId] = currentPrice;
         // Return the selector for the afterInitialize function
@@ -143,12 +145,11 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         SwapParams calldata params,
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
-        // Get the pool id
-        PoolId poolId = key.toId();
-        // Get the latest round data from the Chainlink price feed
+        // Get the latest round data from the Chainlink price feeds
         (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+if (currentPrice <= 0) revert CurrentPriceNotSet();
         // Get the fee based on the pool id and the swap params
-        uint24 fee = getFee(poolId,params);
+        uint24 fee = getFee(PoolId,params);
         // Return the selector for the beforeSwap function and the fee
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
