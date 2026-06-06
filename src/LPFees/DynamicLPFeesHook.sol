@@ -32,10 +32,12 @@ contract DynamicLPFeesHook is BaseHook {
 
 
     mapping(PoolId poolId => int256 referencePrice) public referencePrice;
-    mapping(PoolId poolId => int24 lastKnownTick) public lastKnownTick;
 
 
     error MustUseDynamicFees();
+    error CurrentOraclePriceNotSet();
+    error ReferencePriceNotSet();
+    error PoolIdNotSet();
 
     event FeeAdjusted(
         PoolId indexed poolId,
@@ -44,9 +46,6 @@ contract DynamicLPFeesHook is BaseHook {
         uint256 priceDeviationBps,
         uint256 totalScore
     );
-
-
-
 
 
 AggregatorV3Interface internal PriceDataFeed;
@@ -70,12 +69,13 @@ function latestRoundData()
 function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24){
     // Get the latest round data from the Chainlink price feed
     if (poolId == 0) revert PoolIdNotSet();
-    (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+    (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
+    if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
     //get the reference price from the mapping
     if (referencePrice[poolId] == 0) revert ReferencePriceNotSet();
-    int256 refPrice = referencePrice[poolId];
+    uint256 poolPrice = getPoolPriceFromSqrtPriceX96(key.sqrtPriceX96);
     //calculate the deviation between the current price and the reference price
-    int256 deviation = currentPrice - refPrice;
+    int256 deviation = currentOraclePrice - refPrice;
     //calculate the deviation in basis points  
     uint256 deviationBps = deviation * 10000 / refPrice;
     //calculate the trade size in basis points
@@ -132,9 +132,9 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         // Get the pool id
         PoolId poolId = key.toId();
         // Get the latest round data from the Chainlink price feed
-        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+        (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
         // Store the reference price in the mapping
-        referencePrice[poolId] = currentPrice;
+        referencePrice[poolId] = currentOraclePrice;
         // Return the selector for the afterInitialize function
         return BaseHook.afterInitialize.selector;
     }
@@ -145,11 +145,10 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         SwapParams calldata params,
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
-        // Get the latest round data from the Chainlink price feeds
-        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
-if (currentPrice <= 0) revert CurrentPriceNotSet();
+        // Get the pool id
+        PoolId poolId = key.toId();
         // Get the fee based on the pool id and the swap params
-        uint24 fee = getFee(PoolId,params);
+        uint24 fee = getFee(poolId,params);
         // Return the selector for the beforeSwap function and the fee
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
