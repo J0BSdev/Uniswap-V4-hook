@@ -30,10 +30,7 @@ contract DynamicLPFeesHook is BaseHook {
     uint256 public constant VERY_HIGH_FEE = 50000; //5%
     uint256 public constant MAX_FEE = 100000; //10%
 
-mapping(PoolId => uint256 count) public beforeSwapCount;
-    mapping(PoolId => uint256 count) public afterSwapCount;
-    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
-    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+
     mapping(PoolId => int256) public referencePrice;
 
 
@@ -125,9 +122,14 @@ function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
         override
         returns (bytes4)
         {
+            //
+        // Get the pool id
         PoolId poolId = key.toId();
+        // Get the latest round data from the Chainlink price feed
         (, int256 answer,,,) = PriceDataFeed.latestRoundData();
+        // Store the reference price in the mapping
         referencePrice[poolId] = answer;
+        // Return the selector for the afterInitialize function
         return this.afterInitialize.selector;
     }
 
@@ -137,14 +139,10 @@ function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
         SwapParams calldata params,
         bytes calldata hookData
     ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
-PoolId poolId = key.toId();
+        // Get the pool id
+           PoolId poolId = key.toId();
 
-        // Use time-weighted average price from trusted oracle
-        // This cannot be manipulated within a single transaction
-    (, int256 answer,,,) = PriceDataFeed.latestRoundData();
-        return (BaseHook.beforeSwap.selector,
-         BeforeSwapDeltaLibrary.ZERO_DELTA, 
-         feePips | LPFeeLibrary.OVERRIDE_FEE_FLAG);
+       
     }
     
 }
