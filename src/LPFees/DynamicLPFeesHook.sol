@@ -21,6 +21,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
+    using PoolId for PoolKey;
 
 
     uint256 public constant MIN_FEE = 3000; //0.3%
@@ -65,11 +66,29 @@ function latestRoundData()
 }
 
 
-function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
-    internal
-    pure
-    returns (uint24)
-{
+
+function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24){
+    // Get the latest round data from the Chainlink price feed
+    if (poolId == 0) revert PoolIdNotSet();
+    (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
+    //get the reference price from the mapping
+    if (referencePrice[poolId] == 0) revert ReferencePriceNotSet();
+    int256 referencePrice = referencePrice[poolId];
+    //calculate the deviation between the current price and the reference price
+    if (currentPrice == 0) revert CurrentPriceNotSet();
+    int256 deviation = currentPrice - referencePrice;
+    //calculate the deviation in basis points  
+    if (deviation == 0) revert DeviationNotSet();
+    uint256 deviationBps = deviation * 10000 / referencePrice;
+    //calculate the trade size in basis points
+    uint256 tradeSizeBps = params.amountSpecified * 10000 / liquidity;
+    //calculate the total score
+    uint256 totalScore = deviationBps + tradeSizeBps;
+    //return the fee
+    return totalScore;
+}
+
+
     if (deviationBps < 100) {
         return LOW_FEE;
     }
@@ -110,7 +129,7 @@ function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
 
         // Just to check if the fee is dynamic,if not, revert
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
-        return this.beforeInitialize.selector;
+        return BaseHook.beforeInitialize.selector;
 
     }
 
@@ -126,11 +145,11 @@ function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
         // Get the pool id
         PoolId poolId = key.toId();
         // Get the latest round data from the Chainlink price feed
-        (, int256 answer,,,) = PriceDataFeed.latestRoundData();
+        (, int256 currentPrice,,,) = PriceDataFeed.latestRoundData();
         // Store the reference price in the mapping
-        referencePrice[poolId] = answer;
+        referencePrice[poolId] = currentPrice;
         // Return the selector for the afterInitialize function
-        return this.afterInitialize.selector;
+        return BaseHook.afterInitialize.selector;
     }
 
     function _beforeSwap(
@@ -141,6 +160,11 @@ function getFee(uint256 deviationBps, uint256 tradeSize, uint256 liquidity)
     ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
         // Get the pool id
            PoolId poolId = key.toId();
+           // Get the fee
+           uint24 fee = getFee(poolId, params);
+           // Return the selector for the beforeSwap function and the fee
+           return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee);
+
 
        
     }
