@@ -17,18 +17,23 @@ export const TOKENS = {
 
 export type TokenSymbol = keyof typeof TOKENS;
 
-function readEnv(key: string): string {
-  const v = import.meta.env[key as keyof ImportMetaEnv];
-  return typeof v === "string" ? v.trim() : "";
-}
+// Direct property access so Vite statically replaces these in production builds.
+const clean = (v?: string) => (typeof v === "string" ? v.trim() : "");
 
 export const ENV = {
-  hookAddress: readEnv("VITE_HOOK_ADDRESS") as Address | "",
-  poolId: readEnv("VITE_POOL_ID") as Hex | "",
-  baseRpcUrl: readEnv("VITE_BASE_RPC_URL"),
-  universalRouter: readEnv("VITE_UNIVERSAL_ROUTER") as Address | "",
-  walletConnectProjectId: readEnv("VITE_WALLETCONNECT_PROJECT_ID"),
+  hookAddress: clean(import.meta.env.VITE_HOOK_ADDRESS) as Address | "",
+  poolId: clean(import.meta.env.VITE_POOL_ID) as Hex | "",
+  baseRpcUrl: clean(import.meta.env.VITE_BASE_RPC_URL),
+  universalRouter: clean(import.meta.env.VITE_UNIVERSAL_ROUTER) as Address | "",
+  walletConnectProjectId: clean(import.meta.env.VITE_WALLETCONNECT_PROJECT_ID),
+  // Fork / dev only: a PoolSwapTest router + a funded dev key let the swap card
+  // execute real on-chain swaps without a browser wallet. NEVER set in production.
+  swapRouter: clean(import.meta.env.VITE_SWAP_ROUTER) as Address | "",
+  devPrivateKey: clean(import.meta.env.VITE_DEV_PRIVATE_KEY) as Hex | "",
 };
 
 // The app runs in demo mode until a hook address + pool id are configured.
 export const IS_DEMO = !(ENV.hookAddress && ENV.poolId);
+
+// Real on-chain swaps are available on the fork when a swap router + dev key are set.
+export const CAN_SWAP_ONCHAIN = !IS_DEMO && !!ENV.swapRouter && !!ENV.devPrivateKey;

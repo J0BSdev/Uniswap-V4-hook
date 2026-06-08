@@ -3,8 +3,10 @@ import { useTerminal } from "../state/TerminalContext";
 import { fmtBps, fmtUsd } from "../lib/format";
 
 export function PricePanel() {
-  const { poolPrice, oraclePrice, deviationBps, oracleLive, toggleOracleLive, setOraclePrice } = useTerminal();
+  const { poolPrice, oraclePrice, deviationBps, oracleLive, toggleOracleLive, setOraclePrice, mode } =
+    useTerminal();
   const [draft, setDraft] = useState("");
+  const isLive = mode === "live";
 
   const poolAbove = poolPrice >= oraclePrice;
 
@@ -18,9 +20,15 @@ export function PricePanel() {
     <section className="card price-card">
       <div className="card-head">
         <span className="card-title">Price feeds</span>
-        <button className={`chip ${oracleLive ? "chip-on" : ""}`} onClick={toggleOracleLive}>
-          <span className="dot" /> {oracleLive ? "Oracle live" : "Oracle paused"}
-        </button>
+        {isLive ? (
+          <span className="chip chip-on">
+            <span className="dot" /> On-chain · auto-refresh
+          </span>
+        ) : (
+          <button className={`chip ${oracleLive ? "chip-on" : ""}`} onClick={toggleOracleLive}>
+            <span className="dot" /> {oracleLive ? "Oracle live" : "Oracle paused"}
+          </button>
+        )}
       </div>
 
       <div className="price-grid">
@@ -51,22 +59,31 @@ export function PricePanel() {
         </div>
       </div>
 
-      <div className="oracle-control">
-        <input
-          className="input"
-          placeholder="Set oracle ETH/USD…"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && applyDraft()}
-          inputMode="decimal"
-        />
-        <button className="btn btn-ghost" onClick={applyDraft}>
-          Set
-        </button>
-      </div>
-      <p className="hint">
-        Move the oracle (or swap to move the pool) to watch the fee tier react in real time.
-      </p>
+      {isLive ? (
+        <p className="hint">
+          Live values from the deployed hook’s <code>previewFee</code>, the Chainlink ETH/USD feed, and the
+          pool’s on-chain <code>sqrtPriceX96</code>.
+        </p>
+      ) : (
+        <>
+          <div className="oracle-control">
+            <input
+              className="input"
+              placeholder="Set oracle ETH/USD…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              inputMode="decimal"
+            />
+            <button className="btn btn-ghost" onClick={applyDraft}>
+              Set
+            </button>
+          </div>
+          <p className="hint">
+            Move the oracle (or swap to move the pool) to watch the fee tier react in real time.
+          </p>
+        </>
+      )}
     </section>
   );
 }

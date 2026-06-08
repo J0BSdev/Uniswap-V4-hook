@@ -6,6 +6,8 @@ interface ImportMetaEnv {
   readonly VITE_BASE_RPC_URL?: string;
   readonly VITE_UNIVERSAL_ROUTER?: string;
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string;
+  readonly VITE_SWAP_ROUTER?: string;
+  readonly VITE_DEV_PRIVATE_KEY?: string;
 }
 
 interface ImportMeta {

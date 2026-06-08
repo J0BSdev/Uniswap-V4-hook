@@ -200,6 +200,30 @@ body {
   background: rgba(245, 196, 81, 0.12);
   border: 1px solid rgba(245, 196, 81, 0.3);
 }
+.badge-live {
+  color: var(--up);
+  background: rgba(57, 217, 138, 0.12);
+  border: 1px solid rgba(57, 217, 138, 0.32);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 8px var(--up);
+  animation: pulse 1.6s infinite;
+}
+.banner-error {
+  background: rgba(255, 77, 94, 0.08);
+  border-color: rgba(255, 77, 94, 0.3);
+  color: #ffb3bb;
+}
+.banner-error strong {
+  color: var(--down);
+}
 
 .demo-banner {
   background: rgba(245, 196, 81, 0.07);
@@ -576,6 +600,10 @@ body {
   color: var(--accent);
   font-family: var(--mono);
   animation: fade 0.3s ease;
+  word-break: break-word;
+}
+.flash-error {
+  color: var(--down);
 }
 @keyframes fade {
   from {

@@ -2,7 +2,7 @@ import { useTerminal } from "../state/TerminalContext";
 import { ConnectButton } from "./ConnectButton";
 
 export function Header() {
-  const { isDemo } = useTerminal();
+  const { isDemo, mode } = useTerminal();
   return (
     <header className="header">
       <div className="brand">
@@ -19,9 +19,16 @@ export function Header() {
         </div>
       </div>
       <div className="header-actions">
-        {isDemo && (
+        {isDemo ? (
           <span className="badge badge-demo" title="No hook address configured — running on a simulated pool">
             DEMO
+          </span>
+        ) : (
+          <span
+            className={`badge ${mode === "live" ? "badge-live" : "badge-demo"}`}
+            title="Reading previewFee live from the configured chain"
+          >
+            <span className="live-dot" /> {mode === "live" ? "LIVE" : "CONNECTING"}
           </span>
         )}
         <ConnectButton />

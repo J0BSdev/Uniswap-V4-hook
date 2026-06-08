@@ -6,15 +6,25 @@ import { SwapCard } from "./components/SwapCard";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { useTerminal } from "./state/TerminalContext";
 
-function DemoBanner() {
-  const { isDemo } = useTerminal();
-  if (!isDemo) return null;
-  return (
-    <div className="demo-banner">
-      <strong>Demo mode.</strong> Running on a simulated WETH/USDC pool and oracle. Set
-      <code> VITE_HOOK_ADDRESS</code> and <code>VITE_POOL_ID</code> in <code>.env.local</code> to read live data from Base.
-    </div>
-  );
+function StatusBanner() {
+  const { isDemo, liveError } = useTerminal();
+  if (liveError) {
+    return (
+      <div className="demo-banner banner-error">
+        <strong>Live read issue:</strong> {liveError}. Check the RPC and that the pool is initialized.
+      </div>
+    );
+  }
+  if (isDemo) {
+    return (
+      <div className="demo-banner">
+        <strong>Demo mode.</strong> Running on a simulated WETH/USDC pool and oracle. Set
+        <code> VITE_HOOK_ADDRESS</code> and <code>VITE_POOL_ID</code> in <code>.env.local</code> to read live data from
+        Base.
+      </div>
+    );
+  }
+  return null;
 }
 
 export default function App() {
@@ -23,7 +33,7 @@ export default function App() {
       <div className="bg-grid" aria-hidden />
       <div className="container">
         <Header />
-        <DemoBanner />
+        <StatusBanner />
         <main className="grid">
           <div className="col col-left">
             <FeeGauge />

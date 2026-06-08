@@ -19,6 +19,7 @@ import {
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
 import { IS_DEMO } from "../config/contracts";
+import { useLiveFee } from "../hooks/useLiveFee";
 
 export interface FeeEvent {
   id: number;
@@ -31,6 +32,8 @@ export interface FeeEvent {
 
 interface TerminalState {
   isDemo: boolean;
+  mode: "demo" | "live";
+  liveError?: string;
   reserves: PoolReserves;
   oraclePrice: number;
   poolPrice: number;
@@ -59,9 +62,18 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const oracleRef = useRef(oraclePrice);
   oracleRef.current = oraclePrice;
 
-  const pPrice = poolPrice(reserves);
-  const dev = deviationBps(pPrice, oraclePrice);
-  const feePips = feeForDeviationBps(dev);
+  const live = useLiveFee();
+  const isLive = live.configured && !live.error && live.feePips !== undefined;
+
+  // Demo-derived values (used in demo mode and for the what-if swap simulator).
+  const demoPoolPrice = poolPrice(reserves);
+  const demoDev = deviationBps(demoPoolPrice, oraclePrice);
+
+  // Displayed values prefer live on-chain data when a hook is configured.
+  const pPrice = isLive && live.poolPrice !== undefined ? live.poolPrice : demoPoolPrice;
+  const dispOracle = isLive && live.oraclePrice !== undefined ? live.oraclePrice : oraclePrice;
+  const dev = isLive ? live.deviationBps! : demoDev;
+  const feePips = isLive ? live.feePips! : feeForDeviationBps(demoDev);
   const tier = tierForDeviationBps(dev);
 
   const pushEvent = useCallback((feePips: number, devBps: number, note: string) => {
@@ -82,7 +94,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   // Demo: gently drift the oracle to mimic a live Chainlink feed.
   useEffect(() => {
-    if (!oracleLive) return;
+    if (!oracleLive || isLive) return;
     const t = setInterval(() => {
       setOracle((prev) => {
         const driftPct = (Math.random() - 0.5) * 0.004; // +/- 0.2%
@@ -91,7 +103,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       });
     }, 3000);
     return () => clearInterval(t);
-  }, [oracleLive]);
+  }, [oracleLive, isLive]);
 
   const setOraclePrice = useCallback(
     (p: number) => {
@@ -105,13 +117,35 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
+  // In live mode the what-if simulator is anchored to the real on-chain pool price
+  // and oracle, using a fixed synthetic depth so previews are consistent with live state.
+  const SIM_DEPTH = 1000; // WETH units
+  const liveSimReserves = (): PoolReserves => ({
+    weth: SIM_DEPTH,
+    usdc: SIM_DEPTH * (live.poolPrice ?? demoPoolPrice),
+  });
+
   const quote = useCallback(
-    (amountIn: number, dir: SwapDir) => quoteSwap(reserves, oraclePrice, amountIn, dir),
-    [reserves, oraclePrice]
+    (amountIn: number, dir: SwapDir) =>
+      isLive && live.poolPrice !== undefined
+        ? quoteSwap(liveSimReserves(), dispOracle, amountIn, dir)
+        : quoteSwap(reserves, oraclePrice, amountIn, dir),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLive, live.poolPrice, dispOracle, reserves, oraclePrice]
   );
 
   const executeSwap = useCallback(
     (amountIn: number, dir: SwapDir) => {
+      if (isLive && live.poolPrice !== undefined) {
+        // What-if against live state — do not mutate (the real pool is on-chain).
+        const q = quoteSwap(liveSimReserves(), dispOracle, amountIn, dir);
+        pushEvent(
+          q.feePips,
+          q.deviationBpsBefore,
+          `What-if ${q.tokenIn}→${q.tokenOut} @ ${(q.feePips / 10000).toFixed(2)}%`
+        );
+        return q;
+      }
       const q = quoteSwap(reserves, oracleRef.current, amountIn, dir);
       setReserves(q.newReserves);
       pushEvent(
@@ -121,7 +155,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       );
       return q;
     },
-    [reserves, pushEvent]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isLive, live.poolPrice, dispOracle, reserves, pushEvent]
   );
 
   const resetPool = useCallback(() => {
@@ -133,8 +168,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const value = useMemo<TerminalState>(
     () => ({
       isDemo: IS_DEMO,
+      mode: isLive ? "live" : "demo",
+      liveError: live.configured ? live.error : undefined,
       reserves,
-      oraclePrice,
+      oraclePrice: dispOracle,
       poolPrice: pPrice,
       deviationBps: dev,
       feePips,
@@ -148,8 +185,11 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       resetPool,
     }),
     [
+      isLive,
+      live.configured,
+      live.error,
       reserves,
-      oraclePrice,
+      dispOracle,
       pPrice,
       dev,
       feePips,

@@ -1,14 +1,20 @@
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTerminal } from "../state/TerminalContext";
 import type { SwapDir } from "../lib/demoPool";
-import { TIERS } from "../lib/feeMath";
+import { TIERS, feePipsToPercent } from "../lib/feeMath";
 import { fmtBps, fmtNum, fmtPct } from "../lib/format";
+import { CAN_SWAP_ONCHAIN } from "../config/contracts";
+import { executeOnchainSwap } from "../lib/swapOnchain";
 
 export function SwapCard() {
-  const { quote, executeSwap, isDemo } = useTerminal();
+  const { quote, executeSwap } = useTerminal();
+  const queryClient = useQueryClient();
   const [dir, setDir] = useState<SwapDir>("WETH_TO_USDC");
   const [amount, setAmount] = useState("1");
   const [flash, setFlash] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const tokenIn = dir === "WETH_TO_USDC" ? "WETH" : "USDC";
   const tokenOut = dir === "WETH_TO_USDC" ? "USDC" : "WETH";
@@ -25,8 +31,33 @@ export function SwapCard() {
     setDir((d) => (d === "WETH_TO_USDC" ? "USDC_TO_WETH" : "WETH_TO_USDC"));
   }
 
-  function onSwap() {
-    if (!q) return;
+  async function onSwap() {
+    if (!q || busy) return;
+    setErrorMsg(null);
+
+    if (CAN_SWAP_ONCHAIN) {
+      setBusy(true);
+      setFlash(`Submitting ${tokenIn}→${tokenOut} swap…`);
+      try {
+        const res = await executeOnchainSwap(tokenIn, amt);
+        setFlash(
+          `On-chain swap confirmed · applied fee ${fmtPct(feePipsToPercent(res.feePips))} (${res.hash.slice(
+            0,
+            10
+          )}…)`
+        );
+        await queryClient.invalidateQueries();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setErrorMsg(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
+        setFlash(null);
+      } finally {
+        setBusy(false);
+        setTimeout(() => setFlash(null), 5000);
+      }
+      return;
+    }
+
     const res = executeSwap(amt, dir);
     setFlash(
       `Swapped ${fmtNum(res.amountIn)} ${res.tokenIn} → ${fmtNum(res.amountOut)} ${res.tokenOut} · fee ${fmtPct(
@@ -40,7 +71,9 @@ export function SwapCard() {
     <section className="card swap-card" style={{ "--accent": tierAccent } as CSSProperties}>
       <div className="card-head">
         <span className="card-title">Swap</span>
-        <span className="muted">{isDemo ? "simulated" : "live"} · dynamic fee applied</span>
+        <span className="muted">
+          {CAN_SWAP_ONCHAIN ? "live on-chain · dynamic fee applied" : "what-if simulator · applies the live tier"}
+        </span>
       </div>
 
       <div className="swap-field">
@@ -84,11 +117,12 @@ export function SwapCard() {
         <Row label="Divergence after">{q ? fmtBps(q.deviationBpsAfter) : "—"}</Row>
       </div>
 
-      <button className="btn btn-primary btn-swap" disabled={!q} onClick={onSwap}>
-        {q ? `Swap ${tokenIn} for ${tokenOut}` : "Enter an amount"}
+      <button className="btn btn-primary btn-swap" disabled={!q || busy} onClick={onSwap}>
+        {busy ? "Confirming…" : q ? `Swap ${tokenIn} for ${tokenOut}` : "Enter an amount"}
       </button>
 
       {flash && <div className="flash">{flash}</div>}
+      {errorMsg && <div className="flash flash-error">{errorMsg}</div>}
     </section>
   );
 }
