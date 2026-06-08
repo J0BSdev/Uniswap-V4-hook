@@ -9,11 +9,24 @@ contract MockChainlinkAggregator {
     uint80 public answeredInRound = 1;
 
     function setRound(int256 _answer, uint256 _startedAt, uint256 _updatedAt) external {
+        _writeRound(_answer, _startedAt, _updatedAt, 0);
+    }
+
+    // answeredInRoundOverride = 0 means "complete round" (answeredInRound == new roundId)
+    function setRoundData(int256 _answer, uint256 _startedAt, uint256 _updatedAt, uint80 answeredInRoundOverride)
+        external
+    {
+        _writeRound(_answer, _startedAt, _updatedAt, answeredInRoundOverride);
+    }
+
+    function _writeRound(int256 _answer, uint256 _startedAt, uint256 _updatedAt, uint80 answeredInRoundOverride)
+        internal
+    {
         answer = _answer;
         startedAt = _startedAt;
         updatedAt = _updatedAt;
         roundId++;
-        answeredInRound = roundId;
+        answeredInRound = answeredInRoundOverride == 0 ? roundId : answeredInRoundOverride;
     }
 
     function latestRoundData()

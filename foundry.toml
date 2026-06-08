@@ -7,5 +7,12 @@ solc_version = "0.8.26"
 evm_version = "cancun"
 ffi = true
 
+[profile.default.fuzz]
+runs = 1000
+
+# Heavy fuzzing profile: run with `FOUNDRY_PROFILE=fuzz forge test`
+[profile.fuzz.fuzz]
+runs = 1000000
+max_test_rejects = 100000000
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
