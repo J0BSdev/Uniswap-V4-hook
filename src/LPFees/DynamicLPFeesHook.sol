@@ -30,7 +30,6 @@ contract DynamicLPFeesHook is BaseHook {
     uint24 public constant HIGH_FEE = 30000; //3%
     uint24 public constant VERY_HIGH_FEE = 50000; //5%
     uint24 public constant MAX_FEE = 100000; //10%
-    uint24 public feePips;
 
     mapping(PoolId poolId => int256 referencePrice) public referencePrice;
 
@@ -74,26 +73,23 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
 
     uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
     if (poolPrice == 0) revert PoolPriceNotSet();
+   
 
     uint256 oraclePrice = uint256(currentOraclePrice);
     uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
     uint256 priceDeviationBps = diff * 10000 / oraclePrice;
 
-    // --- score → fee ---
-    uint256 totalScore = priceDeviationBps + sizeRatioBps;
+    // v1: fee tiers from pool-vs-oracle deviation only (no size/liquidity yet)
+    uint256 totalScore = priceDeviationBps;
+    uint24 feePips;
     if (totalScore < 100)       feePips = LOW_FEE;
     else if (totalScore < 500)  feePips = MEDIUM_FEE;
     else if (totalScore < 2000) feePips = HIGH_FEE;
-    else                      feePips = VERY_HIGH_FEE;
+    else                        feePips = VERY_HIGH_FEE;
     if (feePips < MIN_FEE) feePips = MIN_FEE;
     if (feePips > MAX_FEE) feePips = MAX_FEE;
     return feePips;
 }
-
- 
-
-
-
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
