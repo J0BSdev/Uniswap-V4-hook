@@ -13,6 +13,7 @@ import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
+import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
@@ -23,6 +24,10 @@ contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
+
+    // --- Base mainnet ---
+    address internal constant WETH = 0x4200000000000000000000000000000000000006;
+    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
     // --- fee tiers (pips; 1_000_000 = 100%) ---
     uint24 public constant MIN_FEE = 3000; // 0.3%
@@ -37,30 +42,41 @@ contract DynamicLPFeesHook is BaseHook {
     uint256 public constant SCORE_MEDIUM = 500; // < 5%
     uint256 public constant SCORE_HIGH = 2000; // < 20%
 
-    mapping(PoolId poolId => int256 referencePrice) public referencePrice;
+    /// @dev Chainlink recommendation: wait after sequencer recovery before using price feeds.
+    uint256 public constant SEQUENCER_GRACE_PERIOD = 3600;
+
+    /// @dev Max age of ETH/USD oracle answer before reverting.
+    uint256 public constant MAX_ORACLE_STALENESS = 3600;
 
     AggregatorV3Interface public immutable priceFeed;
+    AggregatorV3Interface public immutable sequencerUptimeFeed;
 
     error MustUseDynamicFees();
+    error InvalidPoolPair();
+    error SequencerDown();
+    error GracePeriodNotOver();
     error CurrentOraclePriceNotSet();
+    error IncompleteOracleRound();
+    error StaleOraclePrice();
     error PoolPriceNotSet();
 
-    event FeeAdjusted(
-        PoolId indexed poolId,
-        uint24 feePips,
-        uint256 sizeRatioBps,
-        uint256 priceDeviationBps,
-        uint256 totalScore
-    );
+    /// @notice Emitted on every swap when the dynamic fee is applied.
+    event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 priceDeviationBps);
 
     constructor(IPoolManager _manager) BaseHook(_manager) {
         priceFeed = AggregatorV3Interface(0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1);
+        sequencerUptimeFeed = AggregatorV3Interface(0xBCF85224fc0756B9Fa45aA7892530B47e10b6433);
+    }
+
+    /// @notice Live fee for the next swap — same logic as `_beforeSwap`, callable by the frontend.
+    function previewFee(PoolId poolId) external view returns (uint24 feePips, uint256 priceDeviationBps) {
+        return getFee(poolId);
     }
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
             beforeInitialize: true,
-            afterInitialize: true,
+            afterInitialize: false,
             beforeAddLiquidity: false,
             beforeRemoveLiquidity: false,
             afterAddLiquidity: false,
@@ -78,31 +94,26 @@ contract DynamicLPFeesHook is BaseHook {
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
+        if (Currency.unwrap(key.currency0) != WETH || Currency.unwrap(key.currency1) != USDC) {
+            revert InvalidPoolPair();
+        }
         return BaseHook.beforeInitialize.selector;
     }
 
-    /// @notice Stores the Chainlink price when a dynamic-fee pool is initialized.
-    /// @dev Stored per poolId; not yet used by `getFee` (v1 uses live pool-vs-oracle deviation).
-    function _afterInitialize(address, PoolKey calldata key, uint160, int24) internal override returns (bytes4) {
-        PoolId poolId = key.toId();
-        (, int256 currentOraclePrice,,,) = priceFeed.latestRoundData();
-        referencePrice[poolId] = currentOraclePrice;
-        return BaseHook.afterInitialize.selector;
-    }
-
-    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
+    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         PoolId poolId = key.toId();
-        uint24 fee = getFee(poolId, params);
+        (uint24 fee, uint256 priceDeviationBps) = getFee(poolId);
+        emit FeeAdjusted(poolId, fee, priceDeviationBps);
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
-    function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24) {
-        (, int256 currentOraclePrice,,,) = priceFeed.latestRoundData();
-        if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
+    function getFee(PoolId poolId) internal view returns (uint24 feePips, uint256 priceDeviationBps) {
+        _checkSequencer();
+        uint256 oraclePrice = _readOraclePrice();
 
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
         if (sqrtPriceX96 == 0) revert PoolPriceNotSet();
@@ -110,19 +121,31 @@ contract DynamicLPFeesHook is BaseHook {
         uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
         if (poolPrice == 0) revert PoolPriceNotSet();
 
-        uint256 oraclePrice = uint256(currentOraclePrice);
         uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
-        uint256 priceDeviationBps = diff * 10000 / oraclePrice;
+        priceDeviationBps = diff * 10000 / oraclePrice;
 
         uint256 totalScore = priceDeviationBps;
-        uint24 feePips;
         if (totalScore < SCORE_LOW) feePips = LOW_FEE;
         else if (totalScore < SCORE_MEDIUM) feePips = MEDIUM_FEE;
         else if (totalScore < SCORE_HIGH) feePips = HIGH_FEE;
         else feePips = VERY_HIGH_FEE;
         if (feePips < MIN_FEE) feePips = MIN_FEE;
         if (feePips > MAX_FEE) feePips = MAX_FEE;
-        return feePips;
+    }
+
+    /// @dev Chainlink L2 pattern: sequencer up + grace period elapsed.
+    function _checkSequencer() internal view {
+        (, int256 answer, uint256 startedAt,,) = sequencerUptimeFeed.latestRoundData();
+        if (answer != 0) revert SequencerDown();
+        if (block.timestamp - startedAt <= SEQUENCER_GRACE_PERIOD) revert GracePeriodNotOver();
+    }
+
+    function _readOraclePrice() internal view returns (uint256 oraclePrice) {
+        (uint80 roundId, int256 answer,, uint256 updatedAt, uint80 answeredInRound) = priceFeed.latestRoundData();
+        if (answer <= 0) revert CurrentOraclePriceNotSet();
+        if (answeredInRound < roundId) revert IncompleteOracleRound();
+        if (block.timestamp - updatedAt > MAX_ORACLE_STALENESS) revert StaleOraclePrice();
+        oraclePrice = uint256(answer);
     }
 
     /// @dev Converts pool sqrt price to Chainlink-compatible 1e8 scale.
