@@ -151,8 +151,9 @@ contract DynamicLPFeesHook is BaseHook {
     }
 
     // sqrtPriceX96 → Chainlink 1e8 scale (1e20 = 1e12 decimal diff + 1e8 chainlink decimals)
+    // Done in two FullMath steps so the intermediate never overflows 256 bits across the
     function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
-        uint256 ratioX192 = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1);
-        poolPrice8 = FullMath.mulDiv(ratioX192, 1e20, 1 << 192);
+        uint256 intermediate = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
+        poolPrice8 = FullMath.mulDiv(intermediate, 1e20, 1 << 96);
     }
 }
