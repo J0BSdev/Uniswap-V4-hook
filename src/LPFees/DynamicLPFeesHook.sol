@@ -29,7 +29,7 @@ contract DynamicLPFeesHook is BaseHook {
     address internal constant WETH = 0x4200000000000000000000000000000000000006;
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
 
-    // --- fee tiers (pips; 1_000_000 = 100%) ---
+    
     uint24 public constant MIN_FEE = 3000; // 0.3%
     uint24 public constant LOW_FEE = 5000; // 0.5%
     uint24 public constant MEDIUM_FEE = 10000; // 1%
@@ -42,10 +42,10 @@ contract DynamicLPFeesHook is BaseHook {
     uint256 public constant SCORE_MEDIUM = 500; // < 5%
     uint256 public constant SCORE_HIGH = 2000; // < 20%
 
-    /// @dev Chainlink recommendation: wait after sequencer recovery before using price feeds.
+    // Chainlink recommendation: wait after sequencer recovery before using price feeds.
     uint256 public constant SEQUENCER_GRACE_PERIOD = 3600;
 
-    /// @dev Max age of ETH/USD oracle answer before reverting.
+    //Max age of ETH/USD oracle answer before reverting.
     uint256 public constant MAX_ORACLE_STALENESS = 3600;
 
     AggregatorV3Interface public immutable priceFeed;
@@ -64,11 +64,11 @@ contract DynamicLPFeesHook is BaseHook {
     event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 priceDeviationBps);
 
     constructor(IPoolManager _manager) BaseHook(_manager) {
-        priceFeed = AggregatorV3Interface(0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1);
+        priceFeed = AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70);
         sequencerUptimeFeed = AggregatorV3Interface(0xBCF85224fc0756B9Fa45aA7892530B47e10b6433);
     }
 
-    /// @notice Live fee for the next swap — same logic as `_beforeSwap`, callable by the frontend.
+    // Live fee for the next swap — same logic as _beforeSwap, callable by the frontend.
     function previewFee(PoolId poolId) external view returns (uint24 feePips, uint256 priceDeviationBps) {
         return getFee(poolId);
     }
@@ -133,7 +133,7 @@ contract DynamicLPFeesHook is BaseHook {
         if (feePips > MAX_FEE) feePips = MAX_FEE;
     }
 
-    /// @dev Chainlink L2 pattern: sequencer up + grace period elapsed.
+    // Chainlink L2 pattern: sequencer up + grace period elapsed.
     function _checkSequencer() internal view {
         (, int256 answer, uint256 startedAt,,) = sequencerUptimeFeed.latestRoundData();
         if (answer != 0) revert SequencerDown();
@@ -148,10 +148,10 @@ contract DynamicLPFeesHook is BaseHook {
         oraclePrice = uint256(answer);
     }
 
-    /// @dev Converts pool sqrt price to Chainlink-compatible 1e8 scale.
-    /// Assumes WETH/USDC pool with token0 = WETH (18 decimals) and token1 = USDC (6 decimals).
+    // Converts pool sqrt price to Chainlink-compatible 1e8 scale (10^(18-6+8) = 1e20).
+    // WETH/USDC pool with token0 = WETH (18 decimals) and token1 = USDC (6 decimals).
     function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
         uint256 priceRaw = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 192);
-        poolPrice8 = priceRaw * 1e14;
+        poolPrice8 = priceRaw * 1e20;
     }
 }
