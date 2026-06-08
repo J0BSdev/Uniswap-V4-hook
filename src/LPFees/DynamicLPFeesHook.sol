@@ -78,9 +78,9 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
     uint256 oraclePrice = uint256(currentOraclePrice);
     uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
     uint256 priceDeviationBps = diff * 10000 / oraclePrice;
+    uint256 totalScore = priceDeviationBps;
 
     // v1: fee tiers from pool-vs-oracle deviation only (no size/liquidity yet)
-    uint256 totalScore = priceDeviationBps;
     uint24 feePips;
     if (totalScore < 100)       feePips = LOW_FEE;
     else if (totalScore < 500)  feePips = MEDIUM_FEE;
