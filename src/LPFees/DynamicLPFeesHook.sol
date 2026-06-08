@@ -11,6 +11,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
+import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -29,7 +30,7 @@ contract DynamicLPFeesHook is BaseHook {
     uint24 public constant HIGH_FEE = 30000; //3%
     uint24 public constant VERY_HIGH_FEE = 50000; //5%
     uint24 public constant MAX_FEE = 100000; //10%
-
+    uint24 public feePips;
 
     mapping(PoolId poolId => int256 referencePrice) public referencePrice;
 
@@ -55,45 +56,38 @@ AggregatorV3Interface internal PriceDataFeed;
         PriceDataFeed = AggregatorV3Interface(0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1);
     }
 
-
-function latestRoundData()
-  public
-  view
-  returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)
-{
-  return PriceDataFeed.latestRoundData();
-}
-
-
+    /// @dev Converts pool sqrt price to Chainlink-compatible 1e8 scale.
+    /// Assumes WETH/USDC pool with token0 = WETH (18 decimals) and token1 = USDC (6 decimals).
+    function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
+        uint256 priceRaw = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 192);
+        poolPrice8 = priceRaw * 1e14;
+    }
 
 function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24){
     // Get the latest round data from the Chainlink price feed
-    (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
+ (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
     if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
 
-    // get the pool price from the sqrtPriceX96
-    (uint160 sqrtPriceX96, , , ) = poolManager.getSlot0(poolId);
+    // get the pool price from sqrtPriceX96
+    (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
+    if (sqrtPriceX96 == 0) revert PoolPriceNotSet();
+
     uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
     if (poolPrice == 0) revert PoolPriceNotSet();
 
-//get the oracle price
-  uint256 oraclePrice = uint256(currentOraclePrice);
-
+    uint256 oraclePrice = uint256(currentOraclePrice);
     uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
     uint256 priceDeviationBps = diff * 10000 / oraclePrice;
 
-    // --- size / liquidity ---
-    uint256 tradeSize = params.amountSpecified >= 0
-        ? uint256(params.amountSpecified)
-        : uint256(-params.amountSpecified);
     // --- score → fee ---
     uint256 totalScore = priceDeviationBps + sizeRatioBps;
     if (totalScore < 100)       feePips = LOW_FEE;
     else if (totalScore < 500)  feePips = MEDIUM_FEE;
     else if (totalScore < 2000) feePips = HIGH_FEE;
-    else                        feePips = VERY_HIGH_FEE;
+    else                      feePips = VERY_HIGH_FEE;
     if (feePips < MIN_FEE) feePips = MIN_FEE;
     if (feePips > MAX_FEE) feePips = MAX_FEE;
+    return feePips;
 }
 
  
@@ -159,5 +153,8 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
         // Return the selector for the beforeSwap function and the fee
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
+
+
+      
     
 }
