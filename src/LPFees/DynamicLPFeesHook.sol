@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 /// @title DynamicLPFeesHook
 /// @author Lovro Posel
-/// @notice V4 hook that raises swap fees when execution risk is high (large trade, thin pool, price drift).
+/// @notice V4 hook that raises LP swap fees when pool price deviates from Chainlink ETH/USD.
 
 import {BaseHook} from "v4-hooks-public/src/base/BaseHook.sol";
 
@@ -14,7 +14,7 @@ import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
-import {PoolId} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
@@ -22,21 +22,27 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 contract DynamicLPFeesHook is BaseHook {
     using LPFeeLibrary for uint24;
     using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
 
+    // --- fee tiers (pips; 1_000_000 = 100%) ---
+    uint24 public constant MIN_FEE = 3000; // 0.3%
+    uint24 public constant LOW_FEE = 5000; // 0.5%
+    uint24 public constant MEDIUM_FEE = 10000; // 1%
+    uint24 public constant HIGH_FEE = 30000; // 3%
+    uint24 public constant VERY_HIGH_FEE = 50000; // 5%
+    uint24 public constant MAX_FEE = 100000; // 10%
 
-    uint24 public constant MIN_FEE = 3000; //0.3%
-    uint24 public constant LOW_FEE = 5000; //0.5%
-    uint24 public constant MEDIUM_FEE = 10000; //1%
-    uint24 public constant HIGH_FEE = 30000; //3%
-    uint24 public constant VERY_HIGH_FEE = 50000; //5%
-    uint24 public constant MAX_FEE = 100000; //10%
+    // --- deviation score thresholds (bps) ---
+    uint256 public constant SCORE_LOW = 100; // < 1%
+    uint256 public constant SCORE_MEDIUM = 500; // < 5%
+    uint256 public constant SCORE_HIGH = 2000; // < 20%
 
     mapping(PoolId poolId => int256 referencePrice) public referencePrice;
 
+    AggregatorV3Interface public immutable priceFeed;
 
     error MustUseDynamicFees();
     error CurrentOraclePriceNotSet();
-    error ReferencePriceNotSet();
     error PoolPriceNotSet();
 
     event FeeAdjusted(
@@ -47,50 +53,9 @@ contract DynamicLPFeesHook is BaseHook {
         uint256 totalScore
     );
 
-
-AggregatorV3Interface internal PriceDataFeed;
-    
-
     constructor(IPoolManager _manager) BaseHook(_manager) {
-        PriceDataFeed = AggregatorV3Interface(0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1);
+        priceFeed = AggregatorV3Interface(0x4aDC67696bA383F43DD60A9e78F2C97Fbbfc7cb1);
     }
-
-    /// @dev Converts pool sqrt price to Chainlink-compatible 1e8 scale.
-    /// Assumes WETH/USDC pool with token0 = WETH (18 decimals) and token1 = USDC (6 decimals).
-    function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
-        uint256 priceRaw = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 192);
-        poolPrice8 = priceRaw * 1e14;
-    }
-
-function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24){
-    // Get the latest round data from the Chainlink price feed
- (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
-    if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
-
-    // get the pool price from sqrtPriceX96
-    (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-    if (sqrtPriceX96 == 0) revert PoolPriceNotSet();
-
-    uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
-    if (poolPrice == 0) revert PoolPriceNotSet();
-   
-
-    uint256 oraclePrice = uint256(currentOraclePrice);
-    uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
-    uint256 priceDeviationBps = diff * 10000 / oraclePrice;
-    
-
-    //fee tiers from pool-vs-oracle deviation only
-    uint256 totalScore = priceDeviationBps; 
-    uint24 feePips;
-    if (totalScore < 100)       feePips = LOW_FEE;
-    else if (totalScore < 500)  feePips = MEDIUM_FEE;
-    else if (totalScore < 2000) feePips = HIGH_FEE;
-    else                        feePips = VERY_HIGH_FEE;
-    if (feePips < MIN_FEE) feePips = MIN_FEE;
-    if (feePips > MAX_FEE) feePips = MAX_FEE;
-    return feePips;
-}
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({
@@ -112,46 +77,58 @@ function getFee(PoolId poolId, SwapParams calldata params) internal view returns
     }
 
     function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
-
-        // Just to check if the fee is dynamic,if not, revert
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
         return BaseHook.beforeInitialize.selector;
-
     }
 
-    /// @notice Stores the Chainlink reference price when a dynamic-fee pool is initialized.
-    /// @dev Called once per pool by the PoolManager after `initialize`. The stored price is used
-    ///      in `_beforeSwap` to compute oracle deviation for dynamic fee tiers.
-    function _afterInitialize(address, PoolKey calldata key, uint160 sqrtPriceX96, int24)
-        internal
-        override
-        returns (bytes4)
-        {
-        // Get the pool id
+    /// @notice Stores the Chainlink price when a dynamic-fee pool is initialized.
+    /// @dev Stored per poolId; not yet used by `getFee` (v1 uses live pool-vs-oracle deviation).
+    function _afterInitialize(address, PoolKey calldata key, uint160, int24) internal override returns (bytes4) {
         PoolId poolId = key.toId();
-        // Get the latest round data from the Chainlink price feed
-        (, int256 currentOraclePrice,,,) = PriceDataFeed.latestRoundData();
-        // Store the reference price in the mapping
+        (, int256 currentOraclePrice,,,) = priceFeed.latestRoundData();
         referencePrice[poolId] = currentOraclePrice;
-        // Return the selector for the afterInitialize function
         return BaseHook.afterInitialize.selector;
     }
 
-    function _beforeSwap(
-        address sender,
-        PoolKey calldata key,
-        SwapParams calldata params,
-        bytes calldata hookData
-    ) internal override returns (bytes4, BeforeSwapDelta, uint24 ) {
-        // Get the pool id
+    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         PoolId poolId = key.toId();
-        // Get the fee based on the pool id and the swap params
-        uint24 fee = getFee(poolId,params);
-        // Return the selector for the beforeSwap function and the fee
+        uint24 fee = getFee(poolId, params);
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
+    function getFee(PoolId poolId, SwapParams calldata params) internal view returns (uint24) {
+        (, int256 currentOraclePrice,,,) = priceFeed.latestRoundData();
+        if (currentOraclePrice <= 0) revert CurrentOraclePriceNotSet();
 
-      
-    
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
+        if (sqrtPriceX96 == 0) revert PoolPriceNotSet();
+
+        uint256 poolPrice = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
+        if (poolPrice == 0) revert PoolPriceNotSet();
+
+        uint256 oraclePrice = uint256(currentOraclePrice);
+        uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
+        uint256 priceDeviationBps = diff * 10000 / oraclePrice;
+
+        uint256 totalScore = priceDeviationBps;
+        uint24 feePips;
+        if (totalScore < SCORE_LOW) feePips = LOW_FEE;
+        else if (totalScore < SCORE_MEDIUM) feePips = MEDIUM_FEE;
+        else if (totalScore < SCORE_HIGH) feePips = HIGH_FEE;
+        else feePips = VERY_HIGH_FEE;
+        if (feePips < MIN_FEE) feePips = MIN_FEE;
+        if (feePips > MAX_FEE) feePips = MAX_FEE;
+        return feePips;
+    }
+
+    /// @dev Converts pool sqrt price to Chainlink-compatible 1e8 scale.
+    /// Assumes WETH/USDC pool with token0 = WETH (18 decimals) and token1 = USDC (6 decimals).
+    function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
+        uint256 priceRaw = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 192);
+        poolPrice8 = priceRaw * 1e14;
+    }
 }
