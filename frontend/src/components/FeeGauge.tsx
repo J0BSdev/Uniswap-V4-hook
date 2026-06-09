@@ -18,7 +18,7 @@ export function FeeGauge() {
   return (
     <section className="card gauge-card" style={{ "--accent": info.accent } as CSSProperties}>
       <div className="card-head">
-        <span className="card-title">Current LP fee</span>
+        <span className="card-title">Oracle risk fee</span>
         <span className="tier-pill" style={{ background: info.accent }}>
           {info.label}
         </span>
@@ -53,7 +53,7 @@ export function FeeGauge() {
 
       <div className="gauge-foot">
         <span>{feePips.toLocaleString()} pips</span>
-        <span className="muted">applied to every swap via beforeSwap</span>
+        <span className="muted">gauge from previewFee · swap fee may be higher for large trades</span>
       </div>
     </section>
   );

@@ -39,9 +39,10 @@ export function SwapCard() {
       setBusy(true);
       setFlash(`Submitting ${tokenIn}→${tokenOut} swap…`);
       try {
-        const res = await executeOnchainSwap(tokenIn, amt);
+        const res = await executeOnchainSwap(tokenIn, amt, q.feePips);
+        const appliedFee = res.feePips > 0 ? res.feePips : q.feePips;
         setFlash(
-          `On-chain swap confirmed · applied fee ${fmtPct(feePipsToPercent(res.feePips))} (${res.hash.slice(
+          `On-chain swap confirmed · applied fee ${fmtPct(feePipsToPercent(appliedFee))} (${res.hash.slice(
             0,
             10
           )}…)`
@@ -109,7 +110,7 @@ export function SwapCard() {
       </div>
 
       <div className="quote-box">
-        <Row label="Dynamic fee">
+        <Row label="Swap fee (oracle + size)">
           <strong style={{ color: tierAccent }}>{q ? fmtPct(q.feePercent) : "—"}</strong>
         </Row>
         <Row label="Fee amount">{q ? `${fmtNum(q.feeAmount)} ${tokenIn}` : "—"}</Row>

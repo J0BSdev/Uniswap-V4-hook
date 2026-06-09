@@ -174,9 +174,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     if (
       !isLive ||
       live.poolPrice === undefined ||
-      !live.sqrtPriceX96 ||
-      !live.liquidity ||
-      live.liquidity === 0n ||
+      live.sqrtPriceX96 === undefined ||
+      live.liquidity === undefined ||
       live.deviationBps === undefined ||
       ENV.lpTickLower === 0 ||
       ENV.lpTickUpper === 0

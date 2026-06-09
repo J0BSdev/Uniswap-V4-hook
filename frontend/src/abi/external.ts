@@ -8,6 +8,20 @@ export const poolManagerAbi = [
     inputs: [{ name: "slot", type: "bytes32" }],
     outputs: [{ name: "value", type: "bytes32" }],
   },
+  {
+    type: "event",
+    name: "Swap",
+    inputs: [
+      { name: "id", type: "bytes32", indexed: true },
+      { name: "sender", type: "address", indexed: true },
+      { name: "amount0", type: "int128", indexed: false },
+      { name: "amount1", type: "int128", indexed: false },
+      { name: "sqrtPriceX96", type: "uint160", indexed: false },
+      { name: "liquidity", type: "uint128", indexed: false },
+      { name: "tick", type: "int24", indexed: false },
+      { name: "fee", type: "uint24", indexed: false },
+    ],
+  },
 ] as const;
 
 export const aggregatorAbi = [
@@ -97,13 +111,13 @@ export const erc20Abi = [
   },
 ] as const;
 
-// DynamicLPFeesHook FeeAdjusted(poolId indexed, feePips, priceDeviationBps)
+// DynamicLPFeesHook FeeAdjusted(poolId indexed, feePips, riskScoreBps)
 export const feeAdjustedEvent = {
   type: "event",
   name: "FeeAdjusted",
   inputs: [
     { name: "poolId", type: "bytes32", indexed: true },
     { name: "feePips", type: "uint24", indexed: false },
-    { name: "priceDeviationBps", type: "uint256", indexed: false },
+    { name: "riskScoreBps", type: "uint256", indexed: false },
   ],
 } as const;

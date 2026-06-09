@@ -7,13 +7,16 @@ import {
   maxUint256,
   type Address,
   type Hex,
+  type TransactionReceipt,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { BASE, ENV } from "../config/contracts";
-import { erc20Abi, feeAdjustedEvent, poolSwapTestAbi } from "../abi/external";
+import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
+import { erc20Abi, poolManagerAbi, poolSwapTestAbi } from "../abi/external";
 
 const DYNAMIC_FEE_FLAG = 0x800000;
+const OVERRIDE_FEE_MASK = 0xbfffff;
 const TICK_SPACING = 60;
 const MIN_SQRT_PRICE = 4295128739n;
 const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n;
@@ -21,7 +24,7 @@ const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n;
 export interface OnchainSwapResult {
   hash: Hex;
   feePips: number;
-  deviationBps: number;
+  riskScoreBps: number;
 }
 
 function clients() {
@@ -42,10 +45,54 @@ const poolKey = (hooks: Address) =>
     hooks,
   }) as const;
 
+/** Strip V4 dynamic-fee override flag (0x400000) if present. */
+function cleanFeePips(raw: number | bigint): number {
+  return Number(raw) & OVERRIDE_FEE_MASK;
+}
+
+/** Read applied fee from hook FeeAdjusted, then PoolManager Swap, in that order. */
+export function extractAppliedFeeFromReceipt(
+  receipt: TransactionReceipt,
+  hook: Address
+): { feePips: number; riskScoreBps: number } {
+  const hookAddr = hook.toLowerCase();
+
+  const feeAdjusted = parseEventLogs({
+    abi: dynamicLpFeesHookAbi,
+    logs: receipt.logs,
+    eventName: "FeeAdjusted",
+  }).filter((e) => e.address.toLowerCase() === hookAddr);
+
+  if (feeAdjusted.length > 0) {
+    const ev = feeAdjusted[feeAdjusted.length - 1]!;
+    return {
+      feePips: cleanFeePips(ev.args.feePips),
+      riskScoreBps: Number(ev.args.riskScoreBps),
+    };
+  }
+
+  const swaps = parseEventLogs({
+    abi: poolManagerAbi,
+    logs: receipt.logs,
+    eventName: "Swap",
+  }).filter((e) => e.address.toLowerCase() === BASE.poolManager.toLowerCase());
+
+  if (swaps.length > 0) {
+    const ev = swaps[swaps.length - 1]!;
+    return {
+      feePips: cleanFeePips(ev.args.fee),
+      riskScoreBps: 0,
+    };
+  }
+
+  return { feePips: 0, riskScoreBps: 0 };
+}
+
 /** Executes a real swap through PoolSwapTest using the configured dev key. */
 export async function executeOnchainSwap(
   tokenIn: "WETH" | "USDC",
-  amountIn: number
+  amountIn: number,
+  previewFeePips?: number
 ): Promise<OnchainSwapResult> {
   const { publicClient, walletClient, account } = clients();
   const router = ENV.swapRouter as Address;
@@ -56,7 +103,6 @@ export async function executeOnchainSwap(
   const amountWei = parseUnits(amountIn.toString(), decimals);
   const tokenAddr = tokenIn === "WETH" ? BASE.weth : BASE.usdc;
 
-  // Ensure the router can pull the input token.
   const allowance = await publicClient.readContract({
     address: tokenAddr,
     abi: erc20Abi,
@@ -81,7 +127,7 @@ export async function executeOnchainSwap(
       poolKey(hook),
       {
         zeroForOne,
-        amountSpecified: -amountWei, // exact input
+        amountSpecified: -amountWei,
         sqrtPriceLimitX96: zeroForOne ? MIN_SQRT_PRICE + 1n : MAX_SQRT_PRICE - 1n,
       },
       { takeClaims: false, settleUsingBurn: false },
@@ -90,17 +136,11 @@ export async function executeOnchainSwap(
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
-
-  const events = parseEventLogs({
-    abi: [feeAdjustedEvent],
-    logs: receipt.logs,
-    eventName: "FeeAdjusted",
-  });
-  const ev = events[0]?.args as { feePips: number; priceDeviationBps: bigint } | undefined;
+  const { feePips, riskScoreBps } = extractAppliedFeeFromReceipt(receipt, hook);
 
   return {
     hash,
-    feePips: ev ? Number(ev.feePips) : 0,
-    deviationBps: ev ? Number(ev.priceDeviationBps) : 0,
+    feePips: feePips > 0 ? feePips : (previewFeePips ?? 0),
+    riskScoreBps,
   };
 }
