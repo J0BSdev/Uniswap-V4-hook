@@ -18,8 +18,9 @@ import {
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { IS_DEMO } from "../config/contracts";
+import { ENV, IS_DEMO } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
+import { reservesFromLiquidity } from "../lib/clReserves";
 
 export interface FeeEvent {
   id: number;
@@ -117,13 +118,21 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
-  // In live mode the what-if simulator is anchored to the real on-chain pool price
-  // and oracle, using a fixed synthetic depth so previews are consistent with live state.
-  const SIM_DEPTH = 1000; // WETH units
-  const liveSimReserves = (): PoolReserves => ({
-    weth: SIM_DEPTH,
-    usdc: SIM_DEPTH * (live.poolPrice ?? demoPoolPrice),
-  });
+  // In live mode derive simulator reserves from on-chain CL liquidity + seeded tick bounds.
+  const liveSimReserves = (): PoolReserves => {
+    const price = live.poolPrice ?? demoPoolPrice;
+    if (
+      live.liquidity &&
+      live.liquidity > 0n &&
+      live.sqrtPriceX96 &&
+      ENV.lpTickLower !== 0 &&
+      ENV.lpTickUpper !== 0
+    ) {
+      return reservesFromLiquidity(live.liquidity, live.sqrtPriceX96, ENV.lpTickLower, ENV.lpTickUpper);
+    }
+    // Fallback until liquidity slot is loaded.
+    return { weth: 120, usdc: 120 * price };
+  };
 
   const quote = useCallback(
     (amountIn: number, dir: SwapDir) =>

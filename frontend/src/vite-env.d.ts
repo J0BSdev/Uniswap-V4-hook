@@ -8,6 +8,8 @@ interface ImportMetaEnv {
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string;
   readonly VITE_SWAP_ROUTER?: string;
   readonly VITE_DEV_PRIVATE_KEY?: string;
+  readonly VITE_LP_TICK_LOWER?: string;
+  readonly VITE_LP_TICK_UPPER?: string;
 }
 
 interface ImportMeta {

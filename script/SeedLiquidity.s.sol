@@ -30,6 +30,9 @@ contract SeedLiquidity is Script {
     address internal constant WETH = 0x4200000000000000000000000000000000000006;
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     int24 internal constant TICK_SPACING = 60;
+    // Concentrated range: +/- 3 spacing units (180 ticks) around the current tick.
+    // Much deeper than a wide range so 1 WETH swaps barely move the pool price.
+    int24 internal constant TICK_UNITS = 3;
 
     function run() external returns (address lpRouter, address swapRouter) {
         address hookAddr = vm.envAddress("HOOK_ADDR");
@@ -46,16 +49,15 @@ contract SeedLiquidity is Script {
         PoolId id = key.toId();
         (uint160 sqrtPriceX96, int24 tick,,) = manager.getSlot0(id);
 
-        // Wide-ish symmetric range around the current tick.
-        int24 lower = ((tick / TICK_SPACING) - 1000) * TICK_SPACING;
-        int24 upper = ((tick / TICK_SPACING) + 1000) * TICK_SPACING;
+        int24 lower = ((tick / TICK_SPACING) - TICK_UNITS) * TICK_SPACING;
+        int24 upper = ((tick / TICK_SPACING) + TICK_UNITS) * TICK_SPACING;
 
         uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(lower),
             TickMath.getSqrtPriceAtTick(upper),
-            50 ether,
-            120_000e6
+            120 ether,
+            210_000e6
         );
 
         vm.startBroadcast();
@@ -86,10 +88,14 @@ contract SeedLiquidity is Script {
 
         console2.log("==========================================================");
         console2.log("Liquidity added. liquidity units:", uint256(liquidity));
+        console2.log("Tick lower:", lower);
+        console2.log("Tick upper:", upper);
         console2.log("PoolModifyLiquidityTest:", lpRouter);
         console2.log("PoolSwapTest (swap router):", swapRouter);
         console2.log("Frontend env:");
         console2.log("  VITE_SWAP_ROUTER =", swapRouter);
+        console2.log("  VITE_LP_TICK_LOWER =", lower);
+        console2.log("  VITE_LP_TICK_UPPER =", upper);
         console2.log("==========================================================");
     }
 }
