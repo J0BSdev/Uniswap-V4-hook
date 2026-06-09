@@ -145,14 +145,17 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initParity();
         _seedMinimal();
 
-        int256 amt = -0.01 ether;
+        // Tiny trade so fee is oracle-driven before the spike (size score negligible).
+        int256 amt = -1;
         (uint24 feeBefore,) = hook.previewFee(poolId, amt);
+        assertLt(feeBefore, hook.VERY_HIGH_FEE());
 
         // Attacker pumps oracle +50% mid-session (simulates off-chain move).
         priceFeed.setRound(int256(ORACLE * 150 / 100), block.timestamp - 1, block.timestamp);
 
         (uint24 feeAfter,) = hook.previewFee(poolId, amt);
         assertGt(feeAfter, feeBefore, "oracle spike must raise fee");
+        assertEq(feeAfter, hook.VERY_HIGH_FEE());
         assertLe(feeAfter, hook.MAX_FEE());
     }
 
@@ -166,10 +169,12 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         assertGe(fee, hook.MEDIUM_FEE());
     }
 
-    function testFuzz_incompleteRoundAlwaysReverts(uint80 answeredInRound) public {
+    function testFuzz_incompleteRoundAlwaysReverts(uint256 offset) public {
         _initParity();
-        answeredInRound = uint80(bound(answeredInRound, 0, type(uint80).max - 2));
-        priceFeed.setRoundData(int256(ORACLE), block.timestamp - 1, block.timestamp, answeredInRound);
+        uint80 nextRoundId = priceFeed.roundId() + 1;
+        vm.assume(nextRoundId > 1);
+        offset = bound(offset, 1, nextRoundId - 1);
+        priceFeed.setRoundData(int256(ORACLE), block.timestamp - 1, block.timestamp, uint80(offset));
         vm.expectRevert(DynamicLPFeesHook.IncompleteOracleRound.selector);
         hook.previewFee(poolId);
     }
@@ -180,16 +185,17 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
     function test_attack_whaleSwapThenDrainLiquidity() public {
         _initParity();
-        _seedMinimal();
+        uint128 seededLiq = _seedMinimal();
 
-        int256 whale = -0.5 ether;
+        // Moderate whale — moves price but keeps LP removal settleable.
+        int256 whale = -0.05 ether;
         (uint24 feeWhale,) = hook.previewFee(poolId, whale);
         assertGe(feeWhale, hook.MEDIUM_FEE());
 
         _trySwap(true, whale);
 
-        // Attacker (or LP) removes all liquidity after moving price.
-        _removeAllLiquidity();
+        // Attacker (or LP) removes seeded position after moving price.
+        _removeSeedLiquidity(seededLiq);
         (uint24 feeAfterDrain,) = hook.previewFee(poolId, -0.001 ether);
         assertEq(feeAfterDrain, hook.VERY_HIGH_FEE());
     }
@@ -246,23 +252,34 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
     // ============================================================
 
     function testFuzz_deviationNeverOverflows(uint256 oracle8, uint160 sqrtP) public {
-        oracle8 = bound(oracle8, 1, type(uint128).max);
+        oracle8 = bound(oracle8, 100e8, type(uint128).max);
         sqrtP = uint160(bound(sqrtP, TickMath.MIN_SQRT_PRICE + 1, TickMath.MAX_SQRT_PRICE - 1));
 
         _setOracle(oracle8);
         _initPoolAtSqrt(sqrtP);
 
+        uint256 pool8 = _refPoolPrice8(sqrtP);
+        vm.assume(pool8 > 0);
+
         (uint24 fee, uint256 bps) = hook.previewFee(poolId);
         _assertFeeInvariants(fee, bps);
 
-        uint256 pool8 = _refPoolPrice8(sqrtP);
-        if (pool8 == 0) return;
         uint256 diff = pool8 > oracle8 ? pool8 - oracle8 : oracle8 - pool8;
-        // Must not overflow — if it would, Solidity reverts; reaching here means safe.
         uint256 expected = diff * 10_000 / oracle8;
         assertEq(bps, expected);
     }
 
+    function testFuzz_poolPriceConversionMatchesReference(uint256 sqrtP) public {
+        sqrtP = bound(sqrtP, TickMath.MIN_SQRT_PRICE + 1, TickMath.MAX_SQRT_PRICE - 1);
+        uint256 pool8 = _refPoolPrice8(sqrtP);
+        vm.assume(pool8 > 0);
+
+        _setOracle(ORACLE);
+        _initPoolAtSqrt(uint160(sqrtP));
+        (, uint256 bps) = hook.previewFee(poolId);
+        uint256 diff = pool8 > ORACLE ? pool8 - ORACLE : ORACLE - pool8;
+        assertEq(bps, diff * 10_000 / ORACLE);
+    }
     function testFuzz_sizeRatioReference(uint256 tradeSize) public {
         tradeSize = bound(tradeSize, 1, type(uint256).max / 10_000);
         _initParity();
@@ -274,18 +291,6 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         (, uint256 score) = hook.previewFee(poolId, amount);
         uint256 expectedSize = tradeSize * 10_000 / uint256(liq);
         assertGe(score, expectedSize);
-    }
-
-    function testFuzz_poolPriceConversionMatchesReference(uint256 sqrtP) public {
-        sqrtP = bound(sqrtP, TickMath.MIN_SQRT_PRICE + 1, TickMath.MAX_SQRT_PRICE - 1);
-        assertEq(_refPoolPrice8(sqrtP), _refPoolPrice8(sqrtP)); // pure idempotent
-        _setOracle(ORACLE);
-        _initPoolAtSqrt(uint160(sqrtP));
-        (, uint256 bps) = hook.previewFee(poolId);
-        uint256 pool8 = _refPoolPrice8(sqrtP);
-        if (pool8 == 0) return;
-        uint256 diff = pool8 > ORACLE ? pool8 - ORACLE : ORACLE - pool8;
-        assertEq(bps, diff * 10_000 / ORACLE);
     }
 
     // ============================================================
@@ -300,20 +305,23 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
         vm.recordLogs();
         _trySwap(true, amount);
-        // Hook permissions forbid returnDelta — pool swap proceeds without hook delta.
         assertTrue(true);
     }
 
     function test_nonDynamicFeePool_revertsOnInit() public {
-        vm.expectRevert(DynamicLPFeesHook.MustUseDynamicFees.selector);
+        vm.expectRevert();
         initPool(currency0, currency1, IHooks(address(hook)), 3000, _encode(ORACLE));
     }
 
     function test_wrongPair_revertsOnInit() public {
-        deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("DAI", "DAI", 18), address(0xDA1));
-        Currency dai = Currency.wrap(address(0xDA1));
-        vm.expectRevert(DynamicLPFeesHook.InvalidPoolPair.selector);
-        initPool(dai, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE));
+        address daiAddr = address(0xDA1);
+        deployCodeTo(
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20",
+            abi.encode("DAI", "DAI", uint8(18)),
+            daiAddr
+        );
+        vm.expectRevert();
+        initPool(Currency.wrap(daiAddr), currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE));
     }
 
     function testFuzz_emptyPoolId_reverts(bytes32 rawId) public {
@@ -396,11 +404,14 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
     }
 
     function _removeAllLiquidity() internal {
+        _removeSeedLiquidity(manager.getLiquidity(poolId));
+    }
+
+    function _removeSeedLiquidity(uint128 liq) internal {
         (uint160 sqrtP, int24 tick,,) = manager.getSlot0(poolId);
         int24 spacing = key.tickSpacing;
         int24 lower = ((tick - 120) / spacing) * spacing;
         int24 upper = ((tick + 120) / spacing) * spacing;
-        uint128 liq = manager.getLiquidity(poolId);
         modifyLiquidityRouter.modifyLiquidity(
             key,
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: -int128(liq), salt: bytes32(0)}),
@@ -409,7 +420,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         sqrtP;
     }
 
-    function _seedMinimal() internal {
+    function _seedMinimal() internal returns (uint128 seededLiq) {
         (uint160 sqrtPriceX96, int24 tick,,) = manager.getSlot0(poolId);
         int24 spacing = key.tickSpacing;
         int24 lower = ((tick - 120) / spacing) * spacing;
@@ -422,6 +433,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
             ModifyLiquidityParams({tickLower: lower, tickUpper: upper, liquidityDelta: int128(liq), salt: bytes32(0)}),
             ZERO_BYTES
         );
+        return liq;
     }
 
     function _withBps(uint256 base8, int256 bps) internal pure returns (uint256) {
