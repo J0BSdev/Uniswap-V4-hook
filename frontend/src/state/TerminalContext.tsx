@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   INITIAL_ORACLE,
   INITIAL_RESERVES,
@@ -18,9 +19,11 @@ import {
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { ENV, IS_DEMO } from "../config/contracts";
+import { CAN_SWAP_ONCHAIN, ENV, IS_DEMO } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
 import { reservesFromLiquidity } from "../lib/clReserves";
+import { nudgeForkOracle, readForkOraclePrice, setForkOraclePrice } from "../lib/forkOracle";
+import { executeOnchainSwap } from "../lib/swapOnchain";
 
 export interface FeeEvent {
   id: number;
@@ -33,6 +36,7 @@ export interface FeeEvent {
 
 interface TerminalState {
   isDemo: boolean;
+  isFork: boolean;
   mode: "demo" | "live";
   liveError?: string;
   reserves: PoolReserves;
@@ -44,7 +48,9 @@ interface TerminalState {
   events: FeeEvent[];
   oracleLive: boolean;
   // actions
-  setOraclePrice: (p: number) => void;
+  setOraclePrice: (p: number) => Promise<void>;
+  nudgeOracle: (deltaPct: number) => Promise<void>;
+  nudgePool: (wethAmount?: number) => Promise<void>;
   toggleOracleLive: () => void;
   quote: (amountIn: number, dir: SwapDir) => SwapQuote;
   executeSwap: (amountIn: number, dir: SwapDir) => SwapQuote;
@@ -56,6 +62,7 @@ const Ctx = createContext<TerminalState | null>(null);
 let eventSeq = 0;
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [reserves, setReserves] = useState<PoolReserves>(INITIAL_RESERVES);
   const [oraclePrice, setOracle] = useState<number>(INITIAL_ORACLE);
   const [oracleLive, setOracleLive] = useState<boolean>(true);
@@ -63,7 +70,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const oracleRef = useRef(oraclePrice);
   oracleRef.current = oraclePrice;
 
-  const live = useLiveFee();
+  const live = useLiveFee(CAN_SWAP_ONCHAIN ? 4000 : 8000);
   const isLive = live.configured && !live.error && live.feePips !== undefined;
 
   // Demo-derived values (used in demo mode and for the what-if swap simulator).
@@ -93,27 +100,72 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // Demo: gently drift the oracle to mimic a live Chainlink feed.
+  // Demo mode: local oracle drift. Fork mode: nudge mock Chainlink on-chain.
   useEffect(() => {
-    if (!oracleLive || isLive) return;
+    if (!oracleLive) return;
+
+    if (isLive && CAN_SWAP_ONCHAIN) {
+      const t = setInterval(() => {
+        void (async () => {
+          try {
+            const cur = await readForkOraclePrice();
+            const driftPct = (Math.random() - 0.5) * 0.006; // +/- 0.3%
+            await setForkOraclePrice(Math.max(100, cur * (1 + driftPct)));
+            await queryClient.invalidateQueries();
+          } catch {
+            /* fork RPC unavailable */
+          }
+        })();
+      }, 4000);
+      return () => clearInterval(t);
+    }
+
+    if (isLive) return;
+
     const t = setInterval(() => {
       setOracle((prev) => {
-        const driftPct = (Math.random() - 0.5) * 0.004; // +/- 0.2%
+        const driftPct = (Math.random() - 0.5) * 0.004;
         const next = Math.max(100, prev * (1 + driftPct));
         return Math.round(next * 100) / 100;
       });
     }, 3000);
     return () => clearInterval(t);
-  }, [oracleLive, isLive]);
+  }, [oracleLive, isLive, queryClient]);
 
   const setOraclePrice = useCallback(
-    (p: number) => {
+    async (p: number) => {
       const clamped = Math.max(100, p);
+      if (CAN_SWAP_ONCHAIN) {
+        await setForkOraclePrice(clamped);
+        await queryClient.invalidateQueries();
+        pushEvent(feeForDeviationBps(dev), dev, "Oracle updated (fork)");
+        return;
+      }
       setOracle(Math.round(clamped * 100) / 100);
       const d = deviationBps(poolPrice(reserves), clamped);
       pushEvent(feeForDeviationBps(d), d, "Oracle updated");
     },
-    [reserves, pushEvent]
+    [reserves, pushEvent, dev, queryClient]
+  );
+
+  const nudgeOracle = useCallback(
+    async (deltaPct: number) => {
+      if (!CAN_SWAP_ONCHAIN) return;
+      await nudgeForkOracle(deltaPct);
+      await queryClient.invalidateQueries();
+      pushEvent(feeForDeviationBps(dev), dev, `Oracle ${deltaPct > 0 ? "+" : ""}${deltaPct}%`);
+    },
+    [queryClient, pushEvent, dev]
+  );
+
+  const nudgePool = useCallback(
+    async (wethAmount = 3) => {
+      if (!CAN_SWAP_ONCHAIN) return;
+      await executeOnchainSwap("WETH", wethAmount);
+      await queryClient.invalidateQueries();
+      pushEvent(feePips, dev, `Pool moved (${wethAmount} WETH swap)`);
+    },
+    [queryClient, pushEvent, feePips, dev]
   );
 
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
@@ -177,6 +229,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const value = useMemo<TerminalState>(
     () => ({
       isDemo: IS_DEMO,
+      isFork: CAN_SWAP_ONCHAIN,
       mode: isLive ? "live" : "demo",
       liveError: live.configured ? live.error : undefined,
       reserves,
@@ -188,6 +241,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       events,
       oracleLive,
       setOraclePrice,
+      nudgeOracle,
+      nudgePool,
       toggleOracleLive,
       quote,
       executeSwap,
@@ -206,6 +261,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       events,
       oracleLive,
       setOraclePrice,
+      nudgeOracle,
+      nudgePool,
       toggleOracleLive,
       quote,
       executeSwap,

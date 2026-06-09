@@ -3,8 +3,18 @@ import { useTerminal } from "../state/TerminalContext";
 import { fmtBps, fmtUsd } from "../lib/format";
 
 export function PricePanel() {
-  const { poolPrice, oraclePrice, deviationBps, oracleLive, toggleOracleLive, setOraclePrice, mode } =
-    useTerminal();
+  const {
+    poolPrice,
+    oraclePrice,
+    deviationBps,
+    oracleLive,
+    toggleOracleLive,
+    setOraclePrice,
+    nudgeOracle,
+    nudgePool,
+    mode,
+    isFork,
+  } = useTerminal();
   const [draft, setDraft] = useState("");
   const isLive = mode === "live";
 
@@ -12,7 +22,7 @@ export function PricePanel() {
 
   function applyDraft() {
     const v = parseFloat(draft);
-    if (Number.isFinite(v) && v > 0) setOraclePrice(v);
+    if (Number.isFinite(v) && v > 0) void setOraclePrice(v);
     setDraft("");
   }
 
@@ -20,7 +30,11 @@ export function PricePanel() {
     <section className="card price-card">
       <div className="card-head">
         <span className="card-title">Price feeds</span>
-        {isLive ? (
+        {isLive && isFork ? (
+          <button className={`chip ${oracleLive ? "chip-on" : ""}`} onClick={toggleOracleLive}>
+            <span className="dot" /> {oracleLive ? "Oracle drift on" : "Oracle drift off"}
+          </button>
+        ) : isLive ? (
           <span className="chip chip-on">
             <span className="dot" /> On-chain · auto-refresh
           </span>
@@ -40,7 +54,7 @@ export function PricePanel() {
         <div className="price-cell">
           <span className="price-label">Chainlink ETH/USD</span>
           <span className="price-value">{fmtUsd(oraclePrice)}</span>
-          <span className="price-sub">reference oracle</span>
+          <span className="price-sub">{isFork ? "mock oracle on fork" : "reference oracle"}</span>
         </div>
       </div>
 
@@ -59,10 +73,43 @@ export function PricePanel() {
         </div>
       </div>
 
-      {isLive ? (
+      {isLive && isFork ? (
+        <>
+          <div className="fork-controls">
+            <span className="fork-label">Oracle</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(-1)}>
+              −1%
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(1)}>
+              +1%
+            </button>
+            <span className="fork-label">Pool</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => void nudgePool(3)}>
+              Swap 3 WETH ↓
+            </button>
+          </div>
+          <div className="oracle-control">
+            <input
+              className="input"
+              placeholder="Set oracle ETH/USD…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              inputMode="decimal"
+            />
+            <button className="btn btn-ghost" onClick={applyDraft}>
+              Set
+            </button>
+          </div>
+          <p className="hint">
+            Fork mode: oracle auto-drifts every 4s (toggle above). Use buttons or swap to create divergence and
+            watch the fee tier react via real <code>previewFee</code>.
+          </p>
+        </>
+      ) : isLive ? (
         <p className="hint">
-          Live values from the deployed hook’s <code>previewFee</code>, the Chainlink ETH/USD feed, and the
-          pool’s on-chain <code>sqrtPriceX96</code>.
+          Live values from the deployed hook’s <code>previewFee</code>, Chainlink ETH/USD, and on-chain{" "}
+          <code>sqrtPriceX96</code>.
         </p>
       ) : (
         <>

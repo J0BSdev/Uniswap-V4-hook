@@ -20,9 +20,28 @@ cast block-number --rpc-url "$RPC" >/dev/null || { echo "Anvil failed to start";
 
 echo "==> Syncing block timestamp with Chainlink oracle (prevents StaleOraclePrice)..."
 ORACLE="0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70"
-UPDATED_AT=$(cast call "$ORACLE" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url "$RPC" | awk 'NR==4 {print $1}')
-cast rpc anvil_setNextBlockTimestamp $((UPDATED_AT + 120)) --rpc-url "$RPC" >/dev/null
+REAL_ANSWER=$(cast call "$ORACLE" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url "$RPC" | awk 'NR==2 {gsub(/\[.*/,""); print}')
+UPDATED_AT=$(cast call "$ORACLE" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url "$RPC" | awk 'NR==4 {gsub(/\[.*/,""); print}')
+CURRENT_TS=$(cast block latest --rpc-url "$RPC" --json | python3 -c "import sys,json; t=json.load(sys.stdin)['timestamp']; print(int(t,16) if isinstance(t,str) and t.startswith('0x') else int(t))")
+TARGET=$((UPDATED_AT + 120))
+if [ "$TARGET" -le "$CURRENT_TS" ]; then
+  TARGET=$((CURRENT_TS + 1))
+fi
+cast rpc anvil_setNextBlockTimestamp "$TARGET" --rpc-url "$RPC" >/dev/null
 cast rpc anvil_mine --rpc-url "$RPC" >/dev/null
+
+echo "==> Installing mock Chainlink oracle (fork-controllable)..."
+MOCK_BYTECODE=$(forge inspect MockChainlinkAggregator deployedBytecode --root "$ROOT")
+# forge inspect may omit the 0x prefix
+case "$MOCK_BYTECODE" in 0x*) ;; *) MOCK_BYTECODE="0x$MOCK_BYTECODE" ;; esac
+cast rpc anvil_setCode "$ORACLE" "$MOCK_BYTECODE" --rpc-url "$RPC" >/dev/null
+for i in $(seq 0 10); do
+  SLOT=$(printf '0x%064x' "$i")
+  cast rpc anvil_setStorageAt "$ORACLE" "$SLOT" "0x0000000000000000000000000000000000000000000000000000000000000000" --rpc-url "$RPC" >/dev/null
+done
+cast send "$ORACLE" "setRound(int256,uint256,uint256)" "${REAL_ANSWER:-162641000000}" $((TARGET - 120)) $((TARGET - 60)) \
+  --private-key "$KEY" --rpc-url "$RPC" >/dev/null
+echo "    Mock oracle price USD: $(cast call "$ORACLE" "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url "$RPC" | awk 'NR==2 {gsub(/\[.*/,""); printf "%.2f", $1/1e8}')"
 
 echo "==> Funding dev account (WETH wrap + USDC)..."
 cast send "$WETH" "deposit()" --value 250ether --private-key "$KEY" --rpc-url "$RPC" >/dev/null

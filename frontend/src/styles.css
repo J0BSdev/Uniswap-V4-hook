@@ -453,6 +453,21 @@ body {
   gap: 8px;
   margin-top: 14px;
 }
+.fork-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.fork-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 2px;
+}
 .input {
   flex: 1;
   background: var(--bg-2);
