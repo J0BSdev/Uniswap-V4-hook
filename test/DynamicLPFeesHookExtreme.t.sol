@@ -480,7 +480,11 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager), address(flags));
+        deployCodeTo(
+            "DynamicLPFeesHook.sol",
+            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
+            address(flags)
+        );
         hook = DynamicLPFeesHook(address(flags));
     }
 

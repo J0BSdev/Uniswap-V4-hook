@@ -1,3 +1,4 @@
+import { poolPriceFromSqrt, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { deviationBps, feeForDeviationBps, feePipsToPercent } from "./feeMath";
 import { getSqrtRatioAtTick } from "./tickMath";
 import type { SwapDir, SwapQuote } from "./demoPool";
@@ -26,12 +27,6 @@ function mulDivRoundingUp(a: bigint, b: bigint, d: bigint): bigint {
 
 function divRoundingUp(a: bigint, b: bigint): bigint {
   return (a + b - 1n) / b;
-}
-
-function poolPriceFromSqrt(sqrtPriceX96: bigint): number {
-  const intermediate = (sqrtPriceX96 * sqrtPriceX96) / Q96;
-  const price8 = (intermediate * 10n ** 20n) / Q96;
-  return Number(price8) / 1e8;
 }
 
 function getAmount0Delta(sqrtA: bigint, sqrtB: bigint, liquidity: bigint, roundUp: boolean): bigint {
@@ -147,11 +142,12 @@ function riskScoreBps(deviationBpsBefore: number, liquidity: bigint, amountInWei
  */
 export function quoteSwapLive(state: LivePoolState, amountIn: number, dir: SwapDir): SwapQuote {
   const safeAmount = Number.isFinite(amountIn) && amountIn > 0 ? amountIn : 0;
-  const zeroForOne = dir === "WETH_TO_USDC";
-  const tokenIn = zeroForOne ? "WETH" : "USDC";
-  const tokenOut = zeroForOne ? "USDC" : "WETH";
-  const inDecimals = zeroForOne ? 18 : 6;
-  const outDecimals = zeroForOne ? 6 : 18;
+  const wethToUsdc = dir === "WETH_TO_USDC";
+  const zeroForOne = WETH_IS_CURRENCY0 ? wethToUsdc : !wethToUsdc;
+  const tokenIn = wethToUsdc ? "WETH" : "USDC";
+  const tokenOut = wethToUsdc ? "USDC" : "WETH";
+  const inDecimals = tokenIn === "WETH" ? 18 : 6;
+  const outDecimals = tokenOut === "WETH" ? 18 : 6;
 
   const priceBefore = state.poolPrice;
   const amountInWei = safeAmount > 0 ? toWei(safeAmount, inDecimals) : 0n;

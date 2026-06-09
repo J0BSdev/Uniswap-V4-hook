@@ -1,7 +1,9 @@
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { BASE, CAN_SWAP_ONCHAIN, ENV } from "../config/contracts";
+
+const chain = ENV.chainId === 84532 ? baseSepolia : base;
 import { aggregatorAbi } from "../abi/external";
 import type { Hex } from "viem";
 
@@ -10,8 +12,8 @@ function clients() {
   const account = privateKeyToAccount(ENV.devPrivateKey as Hex);
   const transport = http(rpc);
   return {
-    public: createPublicClient({ chain: base, transport }),
-    wallet: createWalletClient({ chain: base, transport, account }),
+    public: createPublicClient({ chain, transport }),
+    wallet: createWalletClient({ chain, transport, account }),
   };
 }
 

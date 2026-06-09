@@ -10,8 +10,8 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
-import { BASE, ENV } from "../config/contracts";
+import { base, baseSepolia } from "viem/chains";
+import { BASE, ENV, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { erc20Abi, poolManagerAbi, poolSwapTestAbi } from "../abi/external";
 
@@ -31,15 +31,16 @@ function clients() {
   const rpc = ENV.baseRpcUrl || "https://mainnet.base.org";
   const account = privateKeyToAccount(ENV.devPrivateKey as Hex);
   const transport = http(rpc);
-  const publicClient = createPublicClient({ chain: base, transport });
-  const walletClient = createWalletClient({ chain: base, transport, account });
+  const chain = ENV.chainId === 84532 ? baseSepolia : base;
+  const publicClient = createPublicClient({ chain, transport });
+  const walletClient = createWalletClient({ chain, transport, account });
   return { publicClient, walletClient, account };
 }
 
 const poolKey = (hooks: Address) =>
   ({
-    currency0: BASE.weth,
-    currency1: BASE.usdc,
+    currency0: POOL_CURRENCIES.currency0,
+    currency1: POOL_CURRENCIES.currency1,
     fee: DYNAMIC_FEE_FLAG,
     tickSpacing: TICK_SPACING,
     hooks,
@@ -98,7 +99,7 @@ export async function executeOnchainSwap(
   const router = ENV.swapRouter as Address;
   const hook = ENV.hookAddress as Address;
 
-  const zeroForOne = tokenIn === "WETH";
+  const zeroForOne = WETH_IS_CURRENCY0 ? tokenIn === "WETH" : tokenIn === "USDC";
   const decimals = tokenIn === "WETH" ? 18 : 6;
   const amountWei = parseUnits(amountIn.toString(), decimals);
   const tokenAddr = tokenIn === "WETH" ? BASE.weth : BASE.usdc;

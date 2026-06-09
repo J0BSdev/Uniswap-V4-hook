@@ -23,9 +23,10 @@ contract DynamicLPFeesHook is BaseHook {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
-    // Base mainnet — WETH must be currency0 (lower address than USDC)
-    address internal constant WETH = 0x4200000000000000000000000000000000000006;
-    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address internal immutable WETH;
+    address internal immutable USDC;
+    /// @dev True when WETH is currency0 (Base mainnet); false when USDC is currency0 (Base Sepolia).
+    bool internal immutable wethIsCurrency0;
 
     // Fee tiers in pips (1_000_000 = 100%)
     uint24 public constant MIN_FEE = 3000; // 0.3%
@@ -59,10 +60,18 @@ contract DynamicLPFeesHook is BaseHook {
     // riskScoreBps = max(oracle deviation, tradeSize/liquidity) used for the tier
     event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 riskScoreBps);
 
-    // Wire up PoolManager and Chainlink feed addresses for Base mainnet
-    constructor(IPoolManager _manager) BaseHook(_manager) {
-        priceFeed = AggregatorV3Interface(0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70);
-        sequencerUptimeFeed = AggregatorV3Interface(0xBCF85224fc0756B9Fa45aA7892530B47e10b6433);
+    constructor(
+        IPoolManager _manager,
+        address _weth,
+        address _usdc,
+        address _priceFeed,
+        address _sequencerFeed
+    ) BaseHook(_manager) {
+        WETH = _weth;
+        USDC = _usdc;
+        wethIsCurrency0 = _weth < _usdc;
+        priceFeed = AggregatorV3Interface(_priceFeed);
+        sequencerUptimeFeed = AggregatorV3Interface(_sequencerFeed);
     }
 
     // Oracle deviation only — for the risk gauge (no trade size).
@@ -100,9 +109,11 @@ contract DynamicLPFeesHook is BaseHook {
     }
 
     // Pool init validation — must use dynamic fee flag and WETH/USDC pair
-    function _beforeInitialize(address, PoolKey calldata key, uint160) internal pure override returns (bytes4) {
+    function _beforeInitialize(address, PoolKey calldata key, uint160) internal view override returns (bytes4) {
         if (!key.fee.isDynamicFee()) revert MustUseDynamicFees();
-        if (Currency.unwrap(key.currency0) != WETH || Currency.unwrap(key.currency1) != USDC) {
+        address c0 = Currency.unwrap(key.currency0);
+        address c1 = Currency.unwrap(key.currency1);
+        if (!((c0 == WETH && c1 == USDC) || (c0 == USDC && c1 == WETH))) {
             revert InvalidPoolPair();
         }
         return BaseHook.beforeInitialize.selector;
@@ -182,6 +193,8 @@ contract DynamicLPFeesHook is BaseHook {
 
     // Ensure Base sequencer is up and grace period has passed (answer 0 = up, 1 = down)
     function _checkSequencer() internal view {
+        address feed = address(sequencerUptimeFeed);
+        if (feed == address(0)) return;
         (, int256 answer, uint256 startedAt,,) = sequencerUptimeFeed.latestRoundData();
         if (answer != 0) revert SequencerDown();
         if (block.timestamp - startedAt <= SEQUENCER_GRACE_PERIOD) revert GracePeriodNotOver();
@@ -198,8 +211,12 @@ contract DynamicLPFeesHook is BaseHook {
 
     // sqrtPriceX96 → Chainlink 1e8 scale (1e20 = 1e12 decimal diff + 1e8 chainlink decimals)
     // Done in two FullMath steps so the intermediate never overflows 256 bits across the
-    function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal pure returns (uint256 poolPrice8) {
+    function _getPoolPriceFromSqrtPriceX96(uint160 sqrtPriceX96) internal view returns (uint256 poolPrice8) {
         uint256 intermediate = FullMath.mulDiv(uint256(sqrtPriceX96), uint256(sqrtPriceX96), 1 << 96);
-        poolPrice8 = FullMath.mulDiv(intermediate, 1e20, 1 << 96);
+        if (wethIsCurrency0) {
+            poolPrice8 = FullMath.mulDiv(intermediate, 1e20, 1 << 96);
+        } else {
+            poolPrice8 = FullMath.mulDiv(1e20, 1 << 96, intermediate);
+        }
     }
 }

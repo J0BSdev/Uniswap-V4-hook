@@ -3,7 +3,10 @@
 interface ImportMetaEnv {
   readonly VITE_HOOK_ADDRESS?: string;
   readonly VITE_POOL_ID?: string;
+  readonly VITE_CHAIN_ID?: string;
   readonly VITE_BASE_RPC_URL?: string;
+  readonly VITE_ETH_USD_FEED?: string;
+  readonly VITE_POOL_MANAGER?: string;
   readonly VITE_UNIVERSAL_ROUTER?: string;
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string;
   readonly VITE_SWAP_ROUTER?: string;

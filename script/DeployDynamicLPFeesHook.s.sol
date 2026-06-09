@@ -7,7 +7,6 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
-import {FullMath} from "@uniswap/v4-core/src/libraries/FullMath.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -15,6 +14,7 @@ import {HookMiner} from "@uniswap/v4-periphery/src/utils/HookMiner.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 import {DynamicLPFeesHook} from "../src/LPFees/DynamicLPFeesHook.sol";
+import {NetworkConfig} from "./NetworkConfig.sol";
 
 /// @notice Mines a valid hook address, deploys DynamicLPFeesHook via CREATE2, and
 /// initializes the WETH/USDC dynamic-fee pool at the current Chainlink ETH/USD price.
@@ -34,36 +34,36 @@ contract DeployDynamicLPFeesHook is Script {
     // CREATE2 Deployer Proxy (same address on every chain)
     address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
-    // Base mainnet
-    address internal constant POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
-    address internal constant WETH = 0x4200000000000000000000000000000000000006;
-    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address internal constant ETH_USD_FEED = 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70;
-
     int24 internal constant TICK_SPACING = 60;
 
     function run() external returns (address hookAddress, bytes32 poolId) {
-        IPoolManager manager = IPoolManager(POOL_MANAGER);
+        NetworkConfig.Config memory cfg = NetworkConfig.baseMainnet();
+        IPoolManager manager = IPoolManager(cfg.poolManager);
 
         // The deployed address must encode beforeInitialize + beforeSwap in its low bits.
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        bytes memory constructorArgs = abi.encode(manager);
+        bytes memory constructorArgs = abi.encode(
+            manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed
+        );
 
         (address mined, bytes32 salt) =
             HookMiner.find(CREATE2_DEPLOYER, flags, type(DynamicLPFeesHook).creationCode, constructorArgs);
         console2.log("Mined hook address:", mined);
 
-        uint160 sqrtPriceX96 = _sqrtPriceFromOracle();
+        bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
+        uint160 sqrtPriceX96 = _sqrtPriceFromOracle(cfg.ethUsdFeed, wethToken0);
         console2.log("Init sqrtPriceX96:", uint256(sqrtPriceX96));
 
         vm.startBroadcast();
 
-        DynamicLPFeesHook hook = new DynamicLPFeesHook{salt: salt}(manager);
+        DynamicLPFeesHook hook = new DynamicLPFeesHook{salt: salt}(
+            manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed
+        );
         require(address(hook) == mined, "DeployScript: hook address mismatch");
 
         PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(WETH),
-            currency1: Currency.wrap(USDC),
+            currency0: Currency.wrap(NetworkConfig.currency0(cfg.weth, cfg.usdc)),
+            currency1: Currency.wrap(NetworkConfig.currency1(cfg.weth, cfg.usdc)),
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: TICK_SPACING,
             hooks: IHooks(address(hook))
@@ -87,24 +87,8 @@ contract DeployDynamicLPFeesHook is Script {
 
     /// @dev Inverse of the hook's _getPoolPriceFromSqrtPriceX96 so the pool launches at
     /// (approximately) zero deviation from the oracle: sqrtP = sqrt(price8 * 2^192 / 1e20).
-    function _sqrtPriceFromOracle() internal view returns (uint160) {
-        (, int256 answer,,,) = AggregatorV3Interface(ETH_USD_FEED).latestRoundData();
-        require(answer > 0, "DeployScript: bad oracle answer");
-        uint256 target = FullMath.mulDiv(uint256(answer), 1 << 192, 1e20);
-        uint256 root = _sqrt(target);
-        require(root <= type(uint160).max, "DeployScript: sqrtPrice overflow");
-        return uint160(root);
-    }
-
-    /// @dev Babylonian integer square root.
-    function _sqrt(uint256 x) internal pure returns (uint256 z) {
-        if (x == 0) return 0;
-        z = (x + 1) / 2;
-        uint256 y = x;
-        while (z < y) {
-            y = z;
-            z = (x / z + z) / 2;
-        }
-        return y;
+    function _sqrtPriceFromOracle(address feed, bool wethToken0) internal view returns (uint160) {
+        (, int256 answer,,,) = AggregatorV3Interface(feed).latestRoundData();
+        return NetworkConfig.sqrtPriceFromOracle(answer, wethToken0);
     }
 }

@@ -16,6 +16,7 @@ import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.so
 import {LiquidityAmounts} from "@uniswap/v4-core/test/utils/LiquidityAmounts.sol";
 import {PoolModifyLiquidityTest} from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import {NetworkConfig} from "./NetworkConfig.sol";
 
 /// @notice Deploys liquidity + swap test routers and seeds the WETH/USDC pool with
 /// liquidity so the frontend can execute real swaps on the fork.
@@ -26,20 +27,18 @@ contract SeedLiquidity is Script {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
-    address internal constant POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
-    address internal constant WETH = 0x4200000000000000000000000000000000000006;
-    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     int24 internal constant TICK_SPACING = 60;
     // Narrow range around spot; minimal token amounts for fork demo swaps.
     int24 internal constant TICK_UNITS = 3;
 
     function run() external returns (address lpRouter, address swapRouter) {
         address hookAddr = vm.envAddress("HOOK_ADDR");
-        IPoolManager manager = IPoolManager(POOL_MANAGER);
+        NetworkConfig.Config memory cfg = _networkConfig();
+        IPoolManager manager = IPoolManager(cfg.poolManager);
 
         PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(WETH),
-            currency1: Currency.wrap(USDC),
+            currency0: Currency.wrap(NetworkConfig.currency0(cfg.weth, cfg.usdc)),
+            currency1: Currency.wrap(NetworkConfig.currency1(cfg.weth, cfg.usdc)),
             fee: LPFeeLibrary.DYNAMIC_FEE_FLAG,
             tickSpacing: TICK_SPACING,
             hooks: IHooks(hookAddr)
@@ -64,10 +63,10 @@ contract SeedLiquidity is Script {
         PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(manager);
         PoolSwapTest sw = new PoolSwapTest(manager);
 
-        IERC20Minimal(WETH).approve(address(lp), type(uint256).max);
-        IERC20Minimal(USDC).approve(address(lp), type(uint256).max);
-        IERC20Minimal(WETH).approve(address(sw), type(uint256).max);
-        IERC20Minimal(USDC).approve(address(sw), type(uint256).max);
+        IERC20Minimal(cfg.weth).approve(address(lp), type(uint256).max);
+        IERC20Minimal(cfg.usdc).approve(address(lp), type(uint256).max);
+        IERC20Minimal(cfg.weth).approve(address(sw), type(uint256).max);
+        IERC20Minimal(cfg.usdc).approve(address(sw), type(uint256).max);
 
         lp.modifyLiquidity(
             key,
@@ -96,5 +95,12 @@ contract SeedLiquidity is Script {
         console2.log("  VITE_LP_TICK_LOWER =", lower);
         console2.log("  VITE_LP_TICK_UPPER =", upper);
         console2.log("==========================================================");
+    }
+
+    function _networkConfig() internal view returns (NetworkConfig.Config memory cfg) {
+        if (vm.envOr("USE_SEPOLIA", false)) {
+            return NetworkConfig.baseSepolia();
+        }
+        return NetworkConfig.baseMainnet();
     }
 }

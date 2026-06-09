@@ -289,7 +289,11 @@ contract DynamicLPFeesHookMathAudit is Test, Deployers {
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
         address hookAddress = address(flags);
-        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager), hookAddress);
+        deployCodeTo(
+            "DynamicLPFeesHook.sol",
+            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
+            hookAddress
+        );
         hook = DynamicLPFeesHook(hookAddress);
     }
 

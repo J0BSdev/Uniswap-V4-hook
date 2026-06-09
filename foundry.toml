@@ -7,6 +7,10 @@ solc_version = "0.8.26"
 evm_version = "cancun"
 ffi = true
 
+[rpc_endpoints]
+base = "${BASE_RPC_URL}"
+base_sepolia = "https://sepolia.base.org"
+
 [profile.default.fuzz]
 runs = 1000
 

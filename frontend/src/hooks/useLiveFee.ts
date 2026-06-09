@@ -1,6 +1,6 @@
 import { useReadContracts } from "wagmi";
 import { encodePacked, keccak256, toHex, type Hex } from "viem";
-import { BASE, ENV, IS_DEMO } from "../config/contracts";
+import { BASE, ENV, IS_DEMO, poolPriceFromSqrt } from "../config/contracts";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { aggregatorAbi, poolManagerAbi } from "../abi/external";
 
@@ -27,13 +27,6 @@ function poolStateSlot(poolId: Hex): Hex {
 function poolLiquiditySlot(poolId: Hex): Hex {
   const state = BigInt(poolStateSlot(poolId));
   return toHex(state + LIQUIDITY_OFFSET, { size: 32 });
-}
-
-function poolPriceFromSqrt(sqrtPriceX96: bigint): number {
-  const Q96 = 1n << 96n;
-  const intermediate = (sqrtPriceX96 * sqrtPriceX96) / Q96;
-  const price8 = (intermediate * 10n ** 20n) / Q96;
-  return Number(price8) / 1e8;
 }
 
 function parseSlot0(word: Hex): { sqrtPriceX96: bigint; tick: number } {
