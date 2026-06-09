@@ -1,14 +1,17 @@
 import { http, createConfig } from "wagmi";
-import { base } from "wagmi/chains";
+import { base, baseSepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { ENV } from "./contracts";
 
-// Single-chain (Base) wagmi config. Falls back to the public Base RPC.
+const mainnetRpc = ENV.chainId === 8453 && ENV.baseRpcUrl ? ENV.baseRpcUrl : "https://mainnet.base.org";
+const sepoliaRpc = ENV.chainId === 84532 && ENV.baseRpcUrl ? ENV.baseRpcUrl : "https://sepolia.base.org";
+
 export const wagmiConfig = createConfig({
-  chains: [base],
+  chains: [base, baseSepolia],
   connectors: [injected()],
   transports: {
-    [base.id]: http(ENV.baseRpcUrl || "https://mainnet.base.org"),
+    [base.id]: http(mainnetRpc),
+    [baseSepolia.id]: http(sepoliaRpc),
   },
 });
 

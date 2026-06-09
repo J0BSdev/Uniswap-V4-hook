@@ -50,13 +50,7 @@ contract SeedLiquidity is Script {
         int24 lower = ((tick / TICK_SPACING) - TICK_UNITS) * TICK_SPACING;
         int24 upper = ((tick / TICK_SPACING) + TICK_UNITS) * TICK_SPACING;
 
-        uint128 liquidity = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lower),
-            TickMath.getSqrtPriceAtTick(upper),
-            1 ether,
-            3_500e6
-        );
+        uint128 liquidity = _liquidityForSeed(cfg, sqrtPriceX96, lower, upper);
 
         vm.startBroadcast();
 
@@ -102,5 +96,21 @@ contract SeedLiquidity is Script {
             return NetworkConfig.baseSepolia();
         }
         return NetworkConfig.baseMainnet();
+    }
+
+    function _liquidityForSeed(
+        NetworkConfig.Config memory cfg,
+        uint160 sqrtPriceX96,
+        int24 lower,
+        int24 upper
+    ) internal pure returns (uint128) {
+        bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
+        return LiquidityAmounts.getLiquidityForAmounts(
+            sqrtPriceX96,
+            TickMath.getSqrtPriceAtTick(lower),
+            TickMath.getSqrtPriceAtTick(upper),
+            wethToken0 ? 1 ether : 3_500e6,
+            wethToken0 ? 3_500e6 : 1 ether
+        );
     }
 }

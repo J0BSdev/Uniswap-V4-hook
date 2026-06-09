@@ -41,26 +41,32 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
   const configured = !IS_DEMO && !!ENV.hookAddress && !!ENV.poolId;
   const poolId = ENV.poolId as Hex;
 
+  const chainId = ENV.chainId as 8453 | 84532;
+
   const { data, isLoading, error } = useReadContracts({
     contracts: [
       {
+        chainId,
         address: ENV.hookAddress as `0x${string}`,
         abi: dynamicLpFeesHookAbi,
         functionName: "previewFee",
         args: [poolId],
       },
       {
+        chainId,
         address: BASE.ethUsdFeed,
         abi: aggregatorAbi,
         functionName: "latestRoundData",
       },
       {
+        chainId,
         address: BASE.poolManager,
         abi: poolManagerAbi,
         functionName: "extsload",
         args: [configured ? poolStateSlot(poolId) : ("0x".padEnd(66, "0") as Hex)],
       },
       {
+        chainId,
         address: BASE.poolManager,
         abi: poolManagerAbi,
         functionName: "extsload",

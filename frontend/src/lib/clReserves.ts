@@ -1,3 +1,4 @@
+import { WETH_IS_CURRENCY0 } from "../config/contracts";
 import type { PoolReserves } from "./demoPool";
 import { getSqrtRatioAtTick } from "./tickMath";
 
@@ -42,8 +43,10 @@ export function reservesFromLiquidity(
     amount1 = amount1ForLiquidity(sqrtA, sqrtB, liquidity);
   }
 
+  const wethRaw = WETH_IS_CURRENCY0 ? amount0 : amount1;
+  const usdcRaw = WETH_IS_CURRENCY0 ? amount1 : amount0;
   return {
-    weth: Number(amount0) / 1e18,
-    usdc: Number(amount1) / 1e6,
+    weth: Number(wethRaw) / 1e18,
+    usdc: Number(usdcRaw) / 1e6,
   };
 }

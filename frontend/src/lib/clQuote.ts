@@ -1,4 +1,4 @@
-import { poolPriceFromSqrt, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
+import { poolPriceFromSqrt, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { deviationBps, feeForDeviationBps, feePipsToPercent } from "./feeMath";
 import { getSqrtRatioAtTick } from "./tickMath";
 import type { SwapDir, SwapQuote } from "./demoPool";
