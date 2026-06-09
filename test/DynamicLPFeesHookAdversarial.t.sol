@@ -195,8 +195,10 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _swap(false, amount1);
         uint24 feeOneForZero = _readAppliedFee();
 
-        assertEq(feeZeroForOne, hook.previewFee(poolId, amount0));
-        assertEq(feeOneForZero, hook.previewFee(poolId, amount1));
+        (uint24 preview0,) = hook.previewFee(poolId, amount0);
+        (uint24 preview1,) = hook.previewFee(poolId, amount1);
+        assertEq(feeZeroForOne, preview0);
+        assertEq(feeOneForZero, preview1);
     }
 
     // ============================================================

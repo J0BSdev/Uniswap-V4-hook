@@ -122,9 +122,19 @@ function fromWei(amount: bigint, decimals: number): number {
   return Number(amount) / 10 ** decimals;
 }
 
+function absAmountWei(amount: bigint): bigint {
+  if (amount >= 0n) return amount;
+  const min = -(1n << 255n);
+  if (amount === min) return 1n << 255n;
+  return -amount;
+}
+
 function sizeRatioBps(liquidity: bigint, amountInWei: bigint): number {
   if (liquidity === 0n) return Number.MAX_SAFE_INTEGER;
-  return Number((amountInWei * 10_000n) / liquidity);
+  const tradeSize = absAmountWei(amountInWei);
+  const maxMul = (1n << 256n) - 1n;
+  if (tradeSize > maxMul / 10_000n) return Number.MAX_SAFE_INTEGER;
+  return Number((tradeSize * 10_000n) / liquidity);
 }
 
 function riskScoreBps(deviationBpsBefore: number, liquidity: bigint, amountInWei: bigint): number {

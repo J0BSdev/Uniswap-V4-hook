@@ -157,8 +157,17 @@ contract DynamicLPFeesHook is BaseHook {
         uint128 liquidity = poolManager.getLiquidity(poolId);
         if (liquidity == 0) return type(uint256).max;
 
-        uint256 tradeSize = amountSpecified > 0 ? uint256(amountSpecified) : uint256(-amountSpecified);
+        uint256 tradeSize = _absAmount(amountSpecified);
+        // Saturate on overflow — extreme inputs map to max execution-risk score.
+        if (tradeSize > type(uint256).max / 10_000) return type(uint256).max;
         sizeRatioBps = tradeSize * 10_000 / uint256(liquidity);
+    }
+
+    function _absAmount(int256 amount) internal pure returns (uint256) {
+        if (amount >= 0) return uint256(amount);
+        // type(int256).min has no positive int256 counterpart; uint256 abs is 2^255.
+        if (amount == type(int256).min) return uint256(type(int256).max) + 1;
+        return uint256(-amount);
     }
 
     function _feeFromScore(uint256 totalScore) internal pure returns (uint24 feePips, uint256 riskScoreBps) {
