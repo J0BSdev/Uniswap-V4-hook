@@ -332,43 +332,65 @@ contract DynamicLPFeesHookTest is Test, Deployers {
     function test_swap_emitsFeeAdjusted_lowTier() public {
         _initPoolAtOraclePrice();
         _addLiquidity();
+        int256 amount = -0.001 ether;
+        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId, amount);
         vm.expectEmit(true, false, false, true, address(hook));
-        emit DynamicLPFeesHook.FeeAdjusted(poolId, hook.LOW_FEE(), 0);
-        _swap(true, -0.001 ether);
+        emit DynamicLPFeesHook.FeeAdjusted(poolId, expectedFee, expectedBps);
+        _swap(true, amount);
     }
 
     function test_swap_emitsFeeAdjusted_mediumTier() public {
         _initPoolAtDeviationBps(300);
         _addLiquidity();
-        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId);
+        int256 amount = -0.001 ether;
+        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId, amount);
         vm.expectEmit(true, false, false, true, address(hook));
         emit DynamicLPFeesHook.FeeAdjusted(poolId, expectedFee, expectedBps);
-        _swap(true, -0.001 ether);
+        _swap(true, amount);
     }
 
     function test_swap_emitsFeeAdjusted_highTier() public {
         _initPoolAtDeviationBps(1000);
         _addLiquidity();
-        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId);
+        int256 amount = -0.001 ether;
+        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId, amount);
         vm.expectEmit(true, false, false, true, address(hook));
         emit DynamicLPFeesHook.FeeAdjusted(poolId, expectedFee, expectedBps);
-        _swap(true, -0.001 ether);
+        _swap(true, amount);
     }
 
     function test_swap_emitsFeeAdjusted_oneForZero() public {
         _initPoolAtOraclePrice();
         _addLiquidity();
+        int256 amount = -1000e6;
+        (uint24 expectedFee, uint256 expectedBps) = hook.previewFee(poolId, amount);
         vm.expectEmit(true, false, false, true, address(hook));
-        emit DynamicLPFeesHook.FeeAdjusted(poolId, hook.LOW_FEE(), 0);
-        _swap(false, -1000e6);
+        emit DynamicLPFeesHook.FeeAdjusted(poolId, expectedFee, expectedBps);
+        _swap(false, amount);
+    }
+
+    function test_previewFee_swapAware_sizeRatioRaisesFee() public {
+        _initPoolAtOraclePrice();
+        _addLiquidity();
+
+        uint128 liquidity = manager.getLiquidity(poolId);
+        int256 largeSwap = -int256(uint256(liquidity) / 50);
+
+        (uint24 gaugeFee,) = hook.previewFee(poolId);
+        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, largeSwap);
+
+        assertEq(gaugeFee, hook.LOW_FEE());
+        assertGe(swapBps, hook.SCORE_LOW());
+        assertEq(swapFee, hook.MEDIUM_FEE());
     }
 
     function test_swap_previewFeeMatchesEmittedFee() public {
         _initPoolAtDeviationBps(750);
         _addLiquidity();
-        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId);
+        int256 amount = -0.001 ether;
+        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, amount);
         vm.recordLogs();
-        _swap(true, -0.001 ether);
+        _swap(true, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 feeAdjustedTopic = keccak256("FeeAdjusted(bytes32,uint24,uint256)");
         bool found;

@@ -245,10 +245,11 @@ contract DynamicLPFeesHookFuzz is Test, Deployers {
         _initPool(encodeSqrtPriceX96(_priceWithDeltaBps(ORACLE(), int256(deltaBps))));
         _addLiquidity();
 
-        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId);
+        int256 amount = -int256(swapAmount);
+        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, amount);
 
         vm.recordLogs();
-        _swap(true, -int256(swapAmount));
+        _swap(true, amount);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         bytes32 topic = keccak256("FeeAdjusted(bytes32,uint24,uint256)");

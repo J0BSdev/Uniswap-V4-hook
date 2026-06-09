@@ -91,10 +91,11 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _initPool(_encode(_withBps(ORACLE_ETH_USD, signed)));
         _seedLiquidity();
 
-        (uint24 previewFee,) = hook.previewFee(poolId);
+        int256 amount = -0.0005 ether;
+        (uint24 previewFee,) = hook.previewFee(poolId, amount);
 
         vm.recordLogs();
-        _swap(true, -0.0005 ether);
+        _swap(true, amount);
         uint24 applied = _readAppliedFee();
 
         assertEq(applied, previewFee, "applied != preview");
@@ -183,18 +184,19 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _initPool(_encode(_withBps(ORACLE_ETH_USD, int256(deltaBps))));
         _seedLiquidity();
 
-        (uint24 previewFee,) = hook.previewFee(poolId);
+        int256 amount0 = -0.0005 ether;
+        int256 amount1 = -1e6;
 
         vm.recordLogs();
-        _swap(true, -0.0005 ether);
+        _swap(true, amount0);
         uint24 feeZeroForOne = _readAppliedFee();
 
         vm.recordLogs();
-        _swap(false, -1e6);
+        _swap(false, amount1);
         uint24 feeOneForZero = _readAppliedFee();
 
-        assertEq(feeZeroForOne, previewFee);
-        assertEq(feeOneForZero, previewFee);
+        assertEq(feeZeroForOne, hook.previewFee(poolId, amount0));
+        assertEq(feeOneForZero, hook.previewFee(poolId, amount1));
     }
 
     // ============================================================
@@ -203,10 +205,11 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
 
     function test_repeatedSwaps_feeStableWhenPriceStable() public {
         _initAndSeed(0);
+        int256 amount = -0.00001 ether;
         for (uint256 i = 0; i < 5; i++) {
-            (uint24 preview,) = hook.previewFee(poolId);
+            (uint24 preview,) = hook.previewFee(poolId, amount);
             vm.recordLogs();
-            _swap(true, -0.00001 ether);
+            _swap(true, amount);
             assertEq(_readAppliedFee(), preview);
         }
     }
@@ -216,10 +219,11 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
     // ============================================================
 
     function _assertAppliedFeeEquals(uint24 expected) internal {
-        (uint24 preview,) = hook.previewFee(poolId);
+        int256 amount = -0.0005 ether;
+        (uint24 preview,) = hook.previewFee(poolId, amount);
         assertEq(preview, expected, "preview tier mismatch");
         vm.recordLogs();
-        _swap(true, -0.0005 ether);
+        _swap(true, amount);
         assertEq(_readAppliedFee(), expected, "applied fee tier mismatch");
     }
 

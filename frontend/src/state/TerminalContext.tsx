@@ -21,7 +21,7 @@ import {
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
 import { CAN_SWAP_ONCHAIN, ENV, IS_DEMO } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
-import { reservesFromLiquidity } from "../lib/clReserves";
+import { quoteSwapLive } from "../lib/clQuote";
 import { nudgeForkOracle, readForkOraclePrice, setForkOraclePrice } from "../lib/forkOracle";
 import { executeOnchainSwap } from "../lib/swapOnchain";
 
@@ -170,36 +170,54 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
-  // In live mode derive simulator reserves from on-chain CL liquidity + seeded tick bounds.
-  const liveSimReserves = (): PoolReserves => {
-    const price = live.poolPrice ?? demoPoolPrice;
+  const liveQuoteState = () => {
     if (
-      live.liquidity &&
-      live.liquidity > 0n &&
-      live.sqrtPriceX96 &&
-      ENV.lpTickLower !== 0 &&
-      ENV.lpTickUpper !== 0
+      !isLive ||
+      live.poolPrice === undefined ||
+      !live.sqrtPriceX96 ||
+      !live.liquidity ||
+      live.liquidity === 0n ||
+      live.deviationBps === undefined ||
+      ENV.lpTickLower === 0 ||
+      ENV.lpTickUpper === 0
     ) {
-      return reservesFromLiquidity(live.liquidity, live.sqrtPriceX96, ENV.lpTickLower, ENV.lpTickUpper);
+      return null;
     }
-    // Fallback until liquidity slot is loaded.
-    return { weth: 120, usdc: 120 * price };
+    return {
+      sqrtPriceX96: live.sqrtPriceX96,
+      liquidity: live.liquidity,
+      tickLower: ENV.lpTickLower,
+      tickUpper: ENV.lpTickUpper,
+      poolPrice: live.poolPrice,
+      deviationBpsBefore: live.deviationBps,
+      oraclePrice: dispOracle,
+    };
   };
 
   const quote = useCallback(
-    (amountIn: number, dir: SwapDir) =>
-      isLive && live.poolPrice !== undefined
-        ? quoteSwap(liveSimReserves(), dispOracle, amountIn, dir)
-        : quoteSwap(reserves, oraclePrice, amountIn, dir),
+    (amountIn: number, dir: SwapDir) => {
+      const liveState = liveQuoteState();
+      if (liveState) return quoteSwapLive(liveState, amountIn, dir);
+      return quoteSwap(reserves, oraclePrice, amountIn, dir);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLive, live.poolPrice, dispOracle, reserves, oraclePrice]
+    [
+      isLive,
+      live.poolPrice,
+      live.sqrtPriceX96,
+      live.liquidity,
+      live.deviationBps,
+      dispOracle,
+      reserves,
+      oraclePrice,
+    ]
   );
 
   const executeSwap = useCallback(
     (amountIn: number, dir: SwapDir) => {
-      if (isLive && live.poolPrice !== undefined) {
-        // What-if against live state — do not mutate (the real pool is on-chain).
-        const q = quoteSwap(liveSimReserves(), dispOracle, amountIn, dir);
+      const liveState = liveQuoteState();
+      if (liveState) {
+        const q = quoteSwapLive(liveState, amountIn, dir);
         pushEvent(
           q.feePips,
           q.deviationBpsBefore,
@@ -217,7 +235,16 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       return q;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLive, live.poolPrice, dispOracle, reserves, pushEvent]
+    [
+      isLive,
+      live.poolPrice,
+      live.sqrtPriceX96,
+      live.liquidity,
+      live.deviationBps,
+      dispOracle,
+      reserves,
+      pushEvent,
+    ]
   );
 
   const resetPool = useCallback(() => {

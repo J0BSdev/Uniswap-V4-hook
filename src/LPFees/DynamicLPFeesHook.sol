@@ -56,8 +56,8 @@ contract DynamicLPFeesHook is BaseHook {
     error StaleOraclePrice();
     error PoolPriceNotSet();
 
-    // Emitted on every swap when the dynamic fee is applied
-    event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 priceDeviationBps);
+    // riskScoreBps = max(oracle deviation, tradeSize/liquidity) used for the tier
+    event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 riskScoreBps);
 
     // Wire up PoolManager and Chainlink feed addresses for Base mainnet
     constructor(IPoolManager _manager) BaseHook(_manager) {
@@ -65,9 +65,18 @@ contract DynamicLPFeesHook is BaseHook {
         sequencerUptimeFeed = AggregatorV3Interface(0xBCF85224fc0756B9Fa45aA7892530B47e10b6433);
     }
 
-    // Live fee before swap — for frontend, same logic as _beforeSwap
+    // Oracle deviation only — for the risk gauge (no trade size).
     function previewFee(PoolId poolId) external view returns (uint24 feePips, uint256 priceDeviationBps) {
         return getFee(poolId);
+    }
+
+    // Swap-aware preview — same logic as _beforeSwap (includes tradeSize / liquidity).
+    function previewFee(PoolId poolId, int256 amountSpecified)
+        external
+        view
+        returns (uint24 feePips, uint256 riskScoreBps)
+    {
+        return getFee(poolId, amountSpecified);
     }
 
     // Which hook callbacks are enabled — deploy address must match via HookMiner
@@ -100,19 +109,35 @@ contract DynamicLPFeesHook is BaseHook {
     }
 
     // Before each swap: compute fee, emit event, return fee with OVERRIDE flag
-    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata, bytes calldata)
+    function _beforeSwap(address, PoolKey calldata key, SwapParams calldata params, bytes calldata)
         internal
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         PoolId poolId = key.toId();
-        (uint24 fee, uint256 priceDeviationBps) = getFee(poolId);
-        emit FeeAdjusted(poolId, fee, priceDeviationBps);
+        (uint24 fee, uint256 riskScoreBps) = getFee(poolId, params.amountSpecified);
+        emit FeeAdjusted(poolId, fee, riskScoreBps);
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
 
-    // Core logic: pool price vs Chainlink oracle → deviation bps → fee tier
-    function getFee(PoolId poolId) internal view returns (uint24 feePips, uint256 priceDeviationBps) {
+    // Oracle deviation only.
+    function getFee(PoolId poolId) internal view returns (uint24 feePips, uint256 riskScoreBps) {
+        return _feeFromScore(_priceDeviationBps(poolId));
+    }
+
+    // Oracle deviation + |amount| / liquidity execution risk.
+    function getFee(PoolId poolId, int256 amountSpecified)
+        internal
+        view
+        returns (uint24 feePips, uint256 riskScoreBps)
+    {
+        uint256 priceScore = _priceDeviationBps(poolId);
+        uint256 sizeScore = _sizeRatioBps(poolId, amountSpecified);
+        riskScoreBps = priceScore > sizeScore ? priceScore : sizeScore;
+        return _feeFromScore(riskScoreBps);
+    }
+
+    function _priceDeviationBps(PoolId poolId) internal view returns (uint256 priceDeviationBps) {
         _checkSequencer();
         uint256 oraclePrice = _readOraclePrice();
 
@@ -124,8 +149,20 @@ contract DynamicLPFeesHook is BaseHook {
 
         uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
         priceDeviationBps = diff * 10000 / oraclePrice;
+    }
 
-        uint256 totalScore = priceDeviationBps;
+    function _sizeRatioBps(PoolId poolId, int256 amountSpecified) internal view returns (uint256 sizeRatioBps) {
+        if (amountSpecified == 0) return 0;
+
+        uint128 liquidity = poolManager.getLiquidity(poolId);
+        if (liquidity == 0) return type(uint256).max;
+
+        uint256 tradeSize = amountSpecified > 0 ? uint256(amountSpecified) : uint256(-amountSpecified);
+        sizeRatioBps = tradeSize * 10_000 / uint256(liquidity);
+    }
+
+    function _feeFromScore(uint256 totalScore) internal pure returns (uint24 feePips, uint256 riskScoreBps) {
+        riskScoreBps = totalScore;
         if (totalScore < SCORE_LOW) feePips = LOW_FEE;
         else if (totalScore < SCORE_MEDIUM) feePips = MEDIUM_FEE;
         else if (totalScore < SCORE_HIGH) feePips = HIGH_FEE;

@@ -10,6 +10,19 @@ export const dynamicLpFeesHookAbi = [
       { name: "priceDeviationBps", type: "uint256" },
     ],
   },
+  {
+    type: "function",
+    name: "previewFee",
+    stateMutability: "view",
+    inputs: [
+      { name: "poolId", type: "bytes32" },
+      { name: "amountSpecified", type: "int256" },
+    ],
+    outputs: [
+      { name: "feePips", type: "uint24" },
+      { name: "riskScoreBps", type: "uint256" },
+    ],
+  },
   { type: "function", name: "MIN_FEE", stateMutability: "view", inputs: [], outputs: [{ type: "uint24" }] },
   { type: "function", name: "LOW_FEE", stateMutability: "view", inputs: [], outputs: [{ type: "uint24" }] },
   { type: "function", name: "MEDIUM_FEE", stateMutability: "view", inputs: [], outputs: [{ type: "uint24" }] },
@@ -25,7 +38,7 @@ export const dynamicLpFeesHookAbi = [
     inputs: [
       { name: "poolId", type: "bytes32", indexed: true },
       { name: "feePips", type: "uint24", indexed: false },
-      { name: "priceDeviationBps", type: "uint256", indexed: false },
+      { name: "riskScoreBps", type: "uint256", indexed: false },
     ],
   },
 ] as const;

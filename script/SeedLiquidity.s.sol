@@ -30,8 +30,7 @@ contract SeedLiquidity is Script {
     address internal constant WETH = 0x4200000000000000000000000000000000000006;
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     int24 internal constant TICK_SPACING = 60;
-    // Concentrated range: +/- 3 spacing units (180 ticks) around the current tick.
-    // Much deeper than a wide range so 1 WETH swaps barely move the pool price.
+    // Narrow range around spot; minimal token amounts for fork demo swaps.
     int24 internal constant TICK_UNITS = 3;
 
     function run() external returns (address lpRouter, address swapRouter) {
@@ -56,8 +55,8 @@ contract SeedLiquidity is Script {
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(lower),
             TickMath.getSqrtPriceAtTick(upper),
-            120 ether,
-            210_000e6
+            1 ether,
+            3_500e6
         );
 
         vm.startBroadcast();
