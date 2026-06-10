@@ -12,8 +12,11 @@ export function PricePanel() {
     setOraclePrice,
     nudgeOracle,
     nudgePool,
+    refreshOracle,
     mode,
     isFork,
+    canNudgeMockOracle,
+    liveError,
   } = useTerminal();
   const [draft, setDraft] = useState("");
   const isLive = mode === "live";
@@ -54,7 +57,7 @@ export function PricePanel() {
         <div className="price-cell">
           <span className="price-label">Chainlink ETH/USD</span>
           <span className="price-value">{fmtUsd(oraclePrice)}</span>
-          <span className="price-sub">{isFork ? "mock oracle on fork" : "reference oracle"}</span>
+          <span className="price-sub">{canNudgeMockOracle ? "mock oracle · Sepolia" : "reference oracle"}</span>
         </div>
       </div>
 
@@ -104,6 +107,45 @@ export function PricePanel() {
           <p className="hint">
             Fork mode: oracle auto-drifts every 4s (toggle above). Use buttons or swap to create divergence and
             watch the fee tier react via real <code>previewFee</code>.
+          </p>
+        </>
+      ) : isLive && canNudgeMockOracle ? (
+        <>
+          {liveError?.includes("stale") && (
+            <div className="fork-controls">
+              <button className="btn btn-primary btn-sm" onClick={() => void refreshOracle()}>
+                Refresh oracle
+              </button>
+              <span className="hint" style={{ margin: 0 }}>
+                Connect MetaMask on Base Sepolia, then refresh stale mock Chainlink timestamps.
+              </span>
+            </div>
+          )}
+          <div className="fork-controls">
+            <span className="fork-label">Oracle</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(-1)}>
+              −1%
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(1)}>
+              +1%
+            </button>
+          </div>
+          <div className="oracle-control">
+            <input
+              className="input"
+              placeholder="Set oracle ETH/USD…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              inputMode="decimal"
+            />
+            <button className="btn btn-ghost" onClick={applyDraft}>
+              Set
+            </button>
+          </div>
+          <p className="hint">
+            Base Sepolia testnet: mock Chainlink feed — nudge the oracle to watch <code>previewFee</code> tiers update
+            live.
           </p>
         </>
       ) : isLive ? (

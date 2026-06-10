@@ -73,5 +73,8 @@ export const ENV = {
 // The app runs in demo mode until a hook address + pool id are configured.
 export const IS_DEMO = !(ENV.hookAddress && ENV.poolId);
 
-// Real on-chain swaps are available on the fork when a swap router + dev key are set.
+// Real on-chain swaps are available when a swap router + dev key are set.
 export const CAN_SWAP_ONCHAIN = !IS_DEMO && !!ENV.swapRouter && !!ENV.devPrivateKey;
+
+/** Sepolia mock Chainlink feed — anyone can call setRound to refresh staleness. */
+export const CAN_NUDGE_MOCK_ORACLE = !IS_DEMO && IS_SEPOLIA && BASE.ethUsdFeed !== "0x0000000000000000000000000000000000000000";

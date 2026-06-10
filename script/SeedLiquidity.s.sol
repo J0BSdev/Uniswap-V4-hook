@@ -103,14 +103,22 @@ contract SeedLiquidity is Script {
         uint160 sqrtPriceX96,
         int24 lower,
         int24 upper
-    ) internal pure returns (uint128) {
+    ) internal view returns (uint128) {
         bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
+        (uint256 amount0, uint256 amount1) = _seedAmounts(wethToken0);
         return LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(lower),
             TickMath.getSqrtPriceAtTick(upper),
-            wethToken0 ? 1 ether : 3_500e6,
-            wethToken0 ? 3_500e6 : 1 ether
+            amount0,
+            amount1
         );
+    }
+
+    function _seedAmounts(bool wethToken0) internal view returns (uint256 amount0, uint256 amount1) {
+        uint256 wethAmt = vm.envOr("SEED_WETH_WEI", uint256(1 ether));
+        uint256 usdcAmt = vm.envOr("SEED_USDC", uint256(3_500e6));
+        amount0 = wethToken0 ? wethAmt : usdcAmt;
+        amount1 = wethToken0 ? usdcAmt : wethAmt;
     }
 }

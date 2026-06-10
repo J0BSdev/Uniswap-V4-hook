@@ -89,21 +89,6 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
   const slotRes = data?.[2];
   const liqRes = data?.[3];
 
-  if (previewRes?.status === "failure") {
-    const raw = String(previewRes.error ?? "");
-    const msg = raw.includes("a887f2d8")
-      ? "Oracle data is stale on the fork — run script/setup-fork.sh to reset."
-      : raw.includes("617378d7")
-        ? "Pool price not set — fork pool missing or corrupted. Run script/setup-fork.sh."
-        : raw.includes("d15f73b5")
-          ? "Sequencer grace period — wait or reset the fork."
-          : raw.includes("032b3d00")
-            ? "Base sequencer is down according to Chainlink feed."
-            : "previewFee reverted (oracle/sequencer/pool guard)";
-    return { configured: true, loading: false, error: msg };
-  }
-
-  const [feePips, deviationBps] = (previewRes?.result as readonly [number, bigint]) ?? [undefined, undefined];
   const oracleAnswer = (oracleRes?.result as readonly [bigint, bigint, bigint, bigint, bigint] | undefined)?.[1];
 
   let sqrtPriceX96: bigint | undefined;
@@ -122,6 +107,33 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
   }
 
   const oraclePrice = oracleAnswer !== undefined ? Number(oracleAnswer) / 1e8 : undefined;
+
+  if (previewRes?.status === "failure") {
+    const raw = String(previewRes.error ?? "");
+    const msg = raw.includes("a887f2d8")
+      ? chainId === 84532
+        ? "Oracle data is stale — connect wallet and click Refresh oracle."
+        : "Oracle data is stale on the fork — run script/setup-fork.sh to reset."
+      : raw.includes("617378d7")
+        ? "Pool price not set — pool missing or not initialized."
+        : raw.includes("d15f73b5")
+          ? "Sequencer grace period — wait or reset the fork."
+          : raw.includes("032b3d00")
+            ? "Base sequencer is down according to Chainlink feed."
+            : "previewFee reverted (oracle/sequencer/pool guard)";
+    return {
+      configured: true,
+      loading: false,
+      error: msg,
+      oraclePrice,
+      poolPrice,
+      sqrtPriceX96,
+      liquidity,
+      tick,
+    };
+  }
+
+  const [feePips, deviationBps] = (previewRes?.result as readonly [number, bigint]) ?? [undefined, undefined];
 
   return {
     configured: true,

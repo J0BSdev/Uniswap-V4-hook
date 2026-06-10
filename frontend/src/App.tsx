@@ -5,6 +5,7 @@ import { TierLegend } from "./components/TierLegend";
 import { SwapCard } from "./components/SwapCard";
 import { ActivityFeed } from "./components/ActivityFeed";
 import { useTerminal } from "./state/TerminalContext";
+import { ENV } from "./config/contracts";
 
 function StatusBanner() {
   const { isDemo, liveError } = useTerminal();
@@ -46,7 +47,7 @@ export default function App() {
           </div>
         </main>
         <footer className="footer">
-          <span>DynamicLPFeesHook · Uniswap V4 · Base</span>
+          <span>DynamicLPFeesHook · Uniswap V4 · {ENV.chainId === 84532 ? "Base Sepolia" : "Base"}</span>
           <span className="muted">Fees rise with execution risk to protect LPs from toxic flow.</span>
         </footer>
       </div>

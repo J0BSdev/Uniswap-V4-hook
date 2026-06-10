@@ -1,4 +1,5 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { ENV } from "../config/contracts";
 import { shortAddr } from "../lib/format";
 
 export function ConnectButton() {
@@ -7,7 +8,7 @@ export function ConnectButton() {
   const { disconnect } = useDisconnect();
 
   if (isConnected && address) {
-    const wrongChain = chain?.id !== 8453;
+    const wrongChain = chain?.id !== ENV.chainId;
     return (
       <button className={`btn btn-ghost wallet ${wrongChain ? "wallet-warn" : ""}`} onClick={() => disconnect()}>
         <span className="dot" />

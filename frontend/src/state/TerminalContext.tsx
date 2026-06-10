@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useWalletClient } from "wagmi";
 import {
   INITIAL_ORACLE,
   INITIAL_RESERVES,
@@ -19,10 +20,10 @@ import {
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { CAN_SWAP_ONCHAIN, ENV, IS_DEMO } from "../config/contracts";
+import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, ENV, IS_DEMO } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
 import { quoteSwapLive } from "../lib/clQuote";
-import { nudgeForkOracle, readForkOraclePrice, setForkOraclePrice } from "../lib/forkOracle";
+import { nudgeForkOracle, readForkOraclePrice, refreshMockOracleWithWallet, setForkOraclePrice } from "../lib/forkOracle";
 import { executeOnchainSwap } from "../lib/swapOnchain";
 
 export interface FeeEvent {
@@ -37,8 +38,10 @@ export interface FeeEvent {
 interface TerminalState {
   isDemo: boolean;
   isFork: boolean;
+  canNudgeMockOracle: boolean;
   mode: "demo" | "live";
   liveError?: string;
+  refreshOracle: () => Promise<void>;
   reserves: PoolReserves;
   oraclePrice: number;
   poolPrice: number;
@@ -63,6 +66,7 @@ let eventSeq = 0;
 
 export function TerminalProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
+  const { data: walletClient } = useWalletClient();
   const [reserves, setReserves] = useState<PoolReserves>(INITIAL_RESERVES);
   const [oraclePrice, setOracle] = useState<number>(INITIAL_ORACLE);
   const [oracleLive, setOracleLive] = useState<boolean>(true);
@@ -71,7 +75,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   oracleRef.current = oraclePrice;
 
   const live = useLiveFee(CAN_SWAP_ONCHAIN ? 4000 : 8000);
-  const isLive = live.configured && !live.error && live.feePips !== undefined;
+  const hasLivePool = live.configured && live.poolPrice !== undefined;
+  const isLive = hasLivePool && (live.feePips !== undefined || !!live.error);
 
   // Demo-derived values (used in demo mode and for the what-if swap simulator).
   const demoPoolPrice = poolPrice(reserves);
@@ -80,9 +85,11 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   // Displayed values prefer live on-chain data when a hook is configured.
   const pPrice = isLive && live.poolPrice !== undefined ? live.poolPrice : demoPoolPrice;
   const dispOracle = isLive && live.oraclePrice !== undefined ? live.oraclePrice : oraclePrice;
-  const dev = isLive ? live.deviationBps! : demoDev;
-  const feePips = isLive ? live.feePips! : feeForDeviationBps(demoDev);
-  const tier = tierForDeviationBps(dev);
+  const dev = isLive && live.deviationBps !== undefined ? live.deviationBps : demoDev;
+  const feePips = isLive && live.feePips !== undefined ? live.feePips : feeForDeviationBps(demoDev);
+  const tier = tierForDeviationBps(isLive && live.deviationBps !== undefined ? live.deviationBps : dev);
+
+  const oracleWallet = CAN_NUDGE_MOCK_ORACLE ? walletClient : undefined;
 
   const pushEvent = useCallback((feePips: number, devBps: number, note: string) => {
     setEvents((prev) =>
@@ -100,6 +107,13 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const refreshOracle = useCallback(async () => {
+    if (!oracleWallet) return;
+    await refreshMockOracleWithWallet(oracleWallet);
+    await queryClient.invalidateQueries();
+    pushEvent(feePips, dev, "Oracle timestamps refreshed");
+  }, [oracleWallet, queryClient, pushEvent, feePips, dev]);
+
   // Demo mode: local oracle drift. Fork mode: nudge mock Chainlink on-chain.
   useEffect(() => {
     if (!oracleLive) return;
@@ -110,7 +124,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
           try {
             const cur = await readForkOraclePrice();
             const driftPct = (Math.random() - 0.5) * 0.006; // +/- 0.3%
-            await setForkOraclePrice(Math.max(100, cur * (1 + driftPct)));
+            await setForkOraclePrice(Math.max(100, cur * (1 + driftPct)), oracleWallet);
             await queryClient.invalidateQueries();
           } catch {
             /* fork RPC unavailable */
@@ -130,32 +144,32 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       });
     }, 3000);
     return () => clearInterval(t);
-  }, [oracleLive, isLive, queryClient]);
+  }, [oracleLive, isLive, queryClient, oracleWallet]);
 
   const setOraclePrice = useCallback(
     async (p: number) => {
       const clamped = Math.max(100, p);
-      if (CAN_SWAP_ONCHAIN) {
-        await setForkOraclePrice(clamped);
+      if (CAN_SWAP_ONCHAIN || oracleWallet) {
+        await setForkOraclePrice(clamped, oracleWallet);
         await queryClient.invalidateQueries();
-        pushEvent(feeForDeviationBps(dev), dev, "Oracle updated (fork)");
+        pushEvent(feeForDeviationBps(dev), dev, "Oracle updated");
         return;
       }
       setOracle(Math.round(clamped * 100) / 100);
       const d = deviationBps(poolPrice(reserves), clamped);
       pushEvent(feeForDeviationBps(d), d, "Oracle updated");
     },
-    [reserves, pushEvent, dev, queryClient]
+    [reserves, pushEvent, dev, queryClient, oracleWallet]
   );
 
   const nudgeOracle = useCallback(
     async (deltaPct: number) => {
-      if (!CAN_SWAP_ONCHAIN) return;
-      await nudgeForkOracle(deltaPct);
+      if (!CAN_SWAP_ONCHAIN && !oracleWallet) return;
+      await nudgeForkOracle(deltaPct, oracleWallet);
       await queryClient.invalidateQueries();
       pushEvent(feeForDeviationBps(dev), dev, `Oracle ${deltaPct > 0 ? "+" : ""}${deltaPct}%`);
     },
-    [queryClient, pushEvent, dev]
+    [queryClient, pushEvent, dev, oracleWallet]
   );
 
   const nudgePool = useCallback(
@@ -256,8 +270,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     () => ({
       isDemo: IS_DEMO,
       isFork: CAN_SWAP_ONCHAIN,
+      canNudgeMockOracle: CAN_NUDGE_MOCK_ORACLE,
       mode: isLive ? "live" : "demo",
       liveError: live.configured ? live.error : undefined,
+      refreshOracle,
       reserves,
       oraclePrice: dispOracle,
       poolPrice: pPrice,
@@ -278,6 +294,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       isLive,
       live.configured,
       live.error,
+      refreshOracle,
       reserves,
       dispOracle,
       pPrice,
