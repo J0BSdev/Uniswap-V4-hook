@@ -11,7 +11,10 @@ USDC="0x036CbD53842c5426634e7929541eC2318f3dCF7e"
 cd "$ROOT"
 
 echo "==> Deploying hook + mock Chainlink feeds on Base Sepolia..."
-DEPLOY_OUT=$(forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia \
+ORACLE_PRICE8=$(cast call 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70 \
+  "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url https://mainnet.base.org | awk 'NR==2 {print $1}')
+echo "    Mainnet Chainlink ETH/USD: $((ORACLE_PRICE8 / 100000000)) USD"
+DEPLOY_OUT=$(ORACLE_PRICE8="$ORACLE_PRICE8" forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia \
   --rpc-url "$RPC" --broadcast --private-key "$KEY" 2>&1)
 
 HOOK=$(echo "$DEPLOY_OUT" | grep -oP 'DynamicLPFeesHook: \K0x[a-fA-F0-9]{40}' | head -1)
@@ -32,7 +35,7 @@ echo "==> Wrapping ETH for WETH (needs ~1 ETH on deployer)..."
 cast send "$WETH" "deposit()" --value 1ether --private-key "$KEY" --rpc-url "$RPC" >/dev/null || true
 
 echo "==> Seeding liquidity (deployer needs USDC — get from Circle faucet)..."
-SEED_OUT=$(USE_SEPOLIA=true HOOK_ADDR="$HOOK" forge script script/SeedLiquidity.s.sol:SeedLiquidity \
+SEED_OUT=$(USE_SEPOLIA=true HOOK_ADDR="$HOOK" ORACLE_PRICE8="$ORACLE_PRICE8" forge script script/SeedLiquidity.s.sol:SeedLiquidity \
   --rpc-url "$RPC" --broadcast --private-key "$KEY" 2>&1) || {
   echo "$SEED_OUT"
   echo "Seed failed — fund deployer with USDC (https://faucet.circle.com) and re-run:"

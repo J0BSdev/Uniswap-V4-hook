@@ -6,6 +6,8 @@ export function PricePanel() {
   const {
     poolPrice,
     oraclePrice,
+    chainlinkPrice,
+    hookOraclePrice,
     deviationBps,
     clReserves,
     liquidity,
@@ -15,6 +17,8 @@ export function PricePanel() {
     nudgeOracle,
     nudgePool,
     refreshOracle,
+    syncToChainlink,
+    syncOracleBusy,
     resetPool,
     resetPoolBusy,
     mode,
@@ -56,13 +60,26 @@ export function PricePanel() {
         <div className="price-cell">
           <span className="price-label">Pool price</span>
           <span className="price-value">{fmtUsd(poolPrice)}</span>
-          <span className="price-sub">spot from sqrtPriceX96</span>
+          <span className="price-sub">
+            {canNudgeMockOracle && chainlinkPrice !== undefined && Math.abs(poolPrice - chainlinkPrice) / chainlinkPrice > 0.02
+              ? `should be ~${fmtUsd(chainlinkPrice)} (legacy $3500 init)`
+              : "spot from sqrtPriceX96"}
+          </span>
         </div>
         <div className="price-cell">
           <span className="price-label">Chainlink ETH/USD</span>
-          <span className="price-value">{fmtUsd(oraclePrice)}</span>
-          <span className="price-sub">{isFork ? "mock oracle · fork" : canNudgeMockOracle ? "mock oracle · Sepolia" : "reference oracle"}</span>
+          <span className="price-value">{fmtUsd(chainlinkPrice ?? oraclePrice)}</span>
+          <span className="price-sub">
+            {canNudgeMockOracle ? "live · Base mainnet feed" : "on-chain Chainlink feed"}
+          </span>
         </div>
+        {canNudgeMockOracle && hookOraclePrice !== undefined && (
+          <div className="price-cell">
+            <span className="price-label">Hook oracle</span>
+            <span className="price-value">{fmtUsd(hookOraclePrice)}</span>
+            <span className="price-sub">mock feed used by previewFee</span>
+          </div>
+        )}
         {clReserves && (
           <div className="price-cell">
             <span className="price-label">CL depth (seeded range)</span>
@@ -125,16 +142,20 @@ export function PricePanel() {
         </>
       ) : isLive && canNudgeMockOracle ? (
         <>
-          {liveError?.includes("stale") && (
-            <div className="fork-controls">
-              <button className="btn btn-primary btn-sm" onClick={() => void refreshOracle()}>
-                Refresh oracle
+          <div className="fork-controls">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={syncOracleBusy}
+              onClick={() => void syncToChainlink()}
+            >
+              {syncOracleBusy ? "Syncing…" : "Sync to Chainlink"}
+            </button>
+            {liveError?.includes("stale") && (
+              <button className="btn btn-ghost btn-sm" onClick={() => void refreshOracle()}>
+                Refresh timestamps
               </button>
-              <span className="hint" style={{ margin: 0 }}>
-                Connect MetaMask on Base Sepolia, then refresh stale mock Chainlink timestamps.
-              </span>
-            </div>
-          )}
+            )}
+          </div>
           <div className="fork-controls">
             <span className="fork-label">Oracle</span>
             <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(-1)}>
@@ -147,7 +168,7 @@ export function PricePanel() {
           <div className="oracle-control">
             <input
               className="input"
-              placeholder="Set oracle ETH/USD…"
+              placeholder="Set hook oracle ETH/USD…"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && applyDraft()}
@@ -158,22 +179,25 @@ export function PricePanel() {
             </button>
           </div>
           <p className="hint">
-            Base Sepolia testnet: mock Chainlink feed — nudge the oracle to watch <code>previewFee</code> tiers update
-            live.
+            Pool was initialized at $3500. Chainlink is live from mainnet (~$
+            {chainlinkPrice ? Math.round(chainlinkPrice) : "1625"}). Connect wallet and click{" "}
+            <strong>Sync to Chainlink</strong> for the mock oracle; to move the pool spot price on-chain run{" "}
+            <code>bash script/align-sepolia-pool.sh</code> (needs Sepolia WETH + USDC).
           </p>
         </>
       ) : isLive && canNudgeMockOracle && liveError?.includes("stale") ? (
         <>
           <div className="fork-controls">
-            <button className="btn btn-primary btn-sm" onClick={() => void refreshOracle()}>
-              Refresh oracle
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={syncOracleBusy}
+              onClick={() => void syncToChainlink()}
+            >
+              {syncOracleBusy ? "Syncing…" : "Sync to Chainlink"}
             </button>
-            <span className="hint" style={{ margin: 0 }}>
-              Connect MetaMask on Base Sepolia, then refresh stale mock Chainlink timestamps.
-            </span>
           </div>
           <p className="hint">
-            Public demo on Base Sepolia — oracle refresh requires a connected wallet.
+            Connect MetaMask on Base Sepolia to sync the mock oracle to the live Chainlink price.
           </p>
         </>
       ) : isLive ? (

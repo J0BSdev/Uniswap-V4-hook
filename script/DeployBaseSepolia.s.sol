@@ -36,11 +36,12 @@ contract DeployBaseSepolia is Script {
         returns (address hookAddress, bytes32 poolId, address priceFeed, address sequencerFeed)
     {
         NetworkConfig.Config memory cfg = NetworkConfig.baseSepolia();
+        int256 oraclePrice8 = vm.envOr("ORACLE_PRICE8", cfg.defaultOraclePrice8);
 
         vm.startBroadcast();
-        (priceFeed, sequencerFeed) = _deployMocks(cfg.defaultOraclePrice8);
+        (priceFeed, sequencerFeed) = _deployMocks(oraclePrice8);
         hookAddress = _deployHook(cfg, priceFeed, sequencerFeed);
-        poolId = _initPool(cfg, hookAddress, priceFeed);
+        poolId = _initPool(cfg, hookAddress, oraclePrice8);
         vm.stopBroadcast();
 
         _logResults(cfg, hookAddress, poolId, priceFeed, sequencerFeed);
@@ -80,13 +81,14 @@ contract DeployBaseSepolia is Script {
         hookAddress = address(hook);
     }
 
-    function _initPool(NetworkConfig.Config memory cfg, address hookAddress, address priceFeed)
+    function _initPool(NetworkConfig.Config memory cfg, address hookAddress, int256 oraclePrice8)
         internal
         returns (bytes32 poolId)
     {
         IPoolManager manager = IPoolManager(cfg.poolManager);
         bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
-        uint160 sqrtPriceX96 = NetworkConfig.sqrtPriceFromOracle(cfg.defaultOraclePrice8, wethToken0);
+        uint160 sqrtPriceX96 = NetworkConfig.sqrtPriceFromOracle(oraclePrice8, wethToken0);
+        console2.log("Init oracle USD (1e8):", uint256(oraclePrice8));
         console2.log("Init sqrtPriceX96:", uint256(sqrtPriceX96));
 
         PoolKey memory key = PoolKey({

@@ -12,6 +12,8 @@ import {
   parseSlot0,
 } from "../lib/poolState";
 import { createAppPublicClient, requireHex } from "../lib/rpcClient";
+import { readMainnetChainlinkEthUsd } from "../lib/chainlinkRef";
+import { CAN_NUDGE_MOCK_ORACLE } from "../config/contracts";
 
 export interface LiveFeeSnapshot {
   configured: boolean;
@@ -20,6 +22,8 @@ export interface LiveFeeSnapshot {
   feePips?: number;
   deviationBps?: number;
   oraclePrice?: number;
+  /** Live Chainlink ETH/USD from Base mainnet (reference price). */
+  chainlinkPrice?: number;
   poolPrice?: number;
   sqrtPriceX96?: bigint;
   liquidity?: bigint;
@@ -72,6 +76,13 @@ async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loa
   const [, oracleAnswer] = oracleRes;
   const oraclePrice = Number(oracleAnswer) / 1e8;
 
+  let chainlinkPrice: number | undefined;
+  try {
+    chainlinkPrice = await readMainnetChainlinkEthUsd();
+  } catch {
+    chainlinkPrice = CAN_NUDGE_MOCK_ORACLE ? undefined : oraclePrice;
+  }
+
   const computedDev =
     poolPrice !== undefined && oraclePrice > 0
       ? calcDeviationBps(poolPrice, oraclePrice)
@@ -105,6 +116,7 @@ async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loa
     feePips,
     deviationBps,
     oraclePrice,
+    chainlinkPrice,
     poolPrice,
     sqrtPriceX96: sqrtPriceX96 > 0n ? sqrtPriceX96 : undefined,
     liquidity,

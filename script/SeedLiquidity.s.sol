@@ -117,7 +117,11 @@ contract SeedLiquidity is Script {
 
     function _seedAmounts(bool wethToken0) internal view returns (uint256 amount0, uint256 amount1) {
         uint256 wethAmt = vm.envOr("SEED_WETH_WEI", uint256(1 ether));
-        uint256 usdcAmt = vm.envOr("SEED_USDC", uint256(3_500e6));
+        uint256 usdcAmt = vm.envOr("SEED_USDC", uint256(0));
+        if (usdcAmt == 0) {
+            int256 oracle8 = vm.envOr("ORACLE_PRICE8", int256(3500e8));
+            usdcAmt = uint256(oracle8 / 1e8) * 1e6;
+        }
         amount0 = wethToken0 ? wethAmt : usdcAmt;
         amount1 = wethToken0 ? usdcAmt : wethAmt;
     }

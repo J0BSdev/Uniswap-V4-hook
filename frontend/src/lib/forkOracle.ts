@@ -3,6 +3,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 import { BASE, CAN_SWAP_ONCHAIN, ENV } from "../config/contracts";
 import { aggregatorAbi } from "../abi/external";
+import { readMainnetChainlinkEthUsd } from "./chainlinkRef";
 import { createAppPublicClient } from "./rpcClient";
 import type { Hex } from "viem";
 
@@ -85,8 +86,27 @@ export async function setForkOraclePrice(priceUsd: number, wallet?: WalletClient
   await pub.waitForTransactionReceipt({ hash });
 }
 
+/** Sync Sepolia mock oracle to the live Base mainnet Chainlink ETH/USD price. */
+export async function syncOracleToChainlink(wallet?: WalletClient): Promise<number> {
+  const reference = await readMainnetChainlinkEthUsd();
+  await setForkOraclePrice(reference, wallet);
+  return reference;
+}
+
 /** Nudge the mock oracle by a percentage, e.g. +1 or -0.5. */
 export async function nudgeForkOracle(deltaPct: number, wallet?: WalletClient): Promise<void> {
   const current = await readForkOraclePrice();
   await setForkOraclePrice(current * (1 + deltaPct / 100), wallet);
+}
+
+/** Ask Vercel keeper (server-side) to sync mock oracle to mainnet Chainlink. */
+export async function requestKeeperOracleSync(): Promise<number | null> {
+  try {
+    const res = await fetch("/api/sync-oracle", { method: "POST" });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { priceUsd?: number };
+    return body.priceUsd ?? null;
+  } catch {
+    return null;
+  }
 }
