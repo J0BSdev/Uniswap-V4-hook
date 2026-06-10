@@ -15,9 +15,9 @@ if [ -f .env.local ]; then
 fi
 env -u VITE_HOOK_ADDRESS -u VITE_POOL_ID -u VITE_SWAP_ROUTER -u VITE_LP_TICK_LOWER \
   -u VITE_LP_TICK_UPPER -u VITE_BASE_RPC_URL -u VITE_DEV_PRIVATE_KEY -u VITE_CHAIN_ID \
-  npm run build:pages
+  npm run build
 
-echo "==> Deploying to Vercel..."
+echo "==> Deploying to Vercel (production)..."
 if command -v vercel >/dev/null 2>&1; then
   vercel deploy --prod --yes
 else
