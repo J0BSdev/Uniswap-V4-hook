@@ -34,3 +34,4 @@ export function poolPriceFromSlot0(word: Hex): number | undefined {
 export function liquidityFromSlot(word: Hex): bigint {
   return BigInt(word) & ((1n << 128n) - 1n);
 }
+ 

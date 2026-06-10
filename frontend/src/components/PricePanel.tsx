@@ -162,6 +162,20 @@ export function PricePanel() {
             live.
           </p>
         </>
+      ) : isLive && canNudgeMockOracle && liveError?.includes("stale") ? (
+        <>
+          <div className="fork-controls">
+            <button className="btn btn-primary btn-sm" onClick={() => void refreshOracle()}>
+              Refresh oracle
+            </button>
+            <span className="hint" style={{ margin: 0 }}>
+              Connect MetaMask on Base Sepolia, then refresh stale mock Chainlink timestamps.
+            </span>
+          </div>
+          <p className="hint">
+            Public demo on Base Sepolia — oracle refresh requires a connected wallet.
+          </p>
+        </>
       ) : isLive ? (
         <p className="hint">
           Live values from the deployed hook’s <code>previewFee</code>, Chainlink ETH/USD, and on-chain{" "}
