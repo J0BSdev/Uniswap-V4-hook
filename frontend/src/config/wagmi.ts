@@ -1,19 +1,26 @@
 import { http, createConfig } from "wagmi";
 import { base, baseSepolia } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
-import { ENV } from "./contracts";
+import { CAN_SWAP_ONCHAIN, ENV } from "./contracts";
+import { forkDevWallet } from "./forkDevConnector";
 
-const mainnetRpc = ENV.baseRpcUrl && ENV.chainId === 8453 ? ENV.baseRpcUrl : "https://mainnet.base.org";
+const mainnetRpc =
+  ENV.baseRpcUrl && ENV.chainId === 8453
+    ? typeof window !== "undefined" && ENV.baseRpcUrl.includes("127.0.0.1")
+      ? `${window.location.origin}/rpc`
+      : ENV.baseRpcUrl
+    : "https://mainnet.base.org";
 const sepoliaRpc = ENV.baseRpcUrl && ENV.chainId === 84532 ? ENV.baseRpcUrl : "https://sepolia.base.org";
-const forkRpc = ENV.baseRpcUrl && ENV.chainId === 8453 && ENV.baseRpcUrl.includes("127.0.0.1")
-  ? ENV.baseRpcUrl
-  : mainnetRpc;
+
+const connectors = CAN_SWAP_ONCHAIN
+  ? [injected(), forkDevWallet()]
+  : [injected()];
 
 export const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
-  connectors: [injected()],
+  connectors,
   transports: {
-    [base.id]: http(forkRpc),
+    [base.id]: http(mainnetRpc),
     [baseSepolia.id]: http(sepoliaRpc),
   },
 });

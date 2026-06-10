@@ -1,8 +1,9 @@
-import { createPublicClient, createWalletClient, http, type WalletClient } from "viem";
+import { createWalletClient, http, type WalletClient } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
 import { BASE, CAN_SWAP_ONCHAIN, ENV } from "../config/contracts";
 import { aggregatorAbi } from "../abi/external";
+import { createAppPublicClient } from "./rpcClient";
 import type { Hex } from "viem";
 
 const chain = ENV.chainId === 84532 ? baseSepolia : base;
@@ -27,19 +28,14 @@ function devClients() {
   const account = privateKeyToAccount(ENV.devPrivateKey as Hex);
   const transport = http(rpc);
   return {
-    public: createPublicClient({ chain, transport }),
+    public: createAppPublicClient(),
     wallet: createWalletClient({ chain, transport, account }),
   };
 }
 
-function publicClient() {
-  const rpc = ENV.baseRpcUrl || (ENV.chainId === 84532 ? "https://sepolia.base.org" : "https://mainnet.base.org");
-  return createPublicClient({ chain, transport: http(rpc) });
-}
-
 /** Read the current ETH/USD price from the Chainlink (or mock) feed. */
 export async function readForkOraclePrice(): Promise<number> {
-  const client = publicClient();
+  const client = createAppPublicClient();
   const [, answer] = await client.readContract({
     address: BASE.ethUsdFeed,
     abi: aggregatorAbi,
@@ -49,7 +45,7 @@ export async function readForkOraclePrice(): Promise<number> {
 }
 
 async function writeMockOracleRound(wallet: WalletClient, priceUsd: number): Promise<void> {
-  const pub = publicClient();
+  const pub = createAppPublicClient();
   const [account] = await wallet.getAddresses();
   const now = BigInt(Math.floor(Date.now() / 1000));
   const answer = BigInt(Math.round(Math.max(100, priceUsd) * 1e8));

@@ -11,13 +11,13 @@ function timeAgo(ts: number): string {
 }
 
 export function ActivityFeed() {
-  const { events, resetPool } = useTerminal();
+  const { events, resetPool, resetPoolBusy } = useTerminal();
   return (
     <section className="card feed-card">
       <div className="card-head">
         <span className="card-title">FeeAdjusted activity</span>
-        <button className="btn btn-ghost btn-sm" onClick={resetPool}>
-          Reset pool
+        <button className="btn btn-ghost btn-sm" disabled={resetPoolBusy} onClick={() => void resetPool()}>
+          {resetPoolBusy ? "Resetting…" : "Reset pool"}
         </button>
       </div>
       {events.length === 0 ? (

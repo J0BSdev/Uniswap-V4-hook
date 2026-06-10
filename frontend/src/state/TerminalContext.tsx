@@ -26,6 +26,7 @@ import { quoteSwapLive, type LivePoolState } from "../lib/clQuote";
 import { reservesFromLiquidity } from "../lib/clReserves";
 import { resolveTickBounds } from "../lib/poolTicks";
 import { nudgeForkOracle, readForkOraclePrice, refreshMockOracleWithWallet, setForkOraclePrice } from "../lib/forkOracle";
+import { resetForkPoolState } from "../lib/forkReset";
 import { executeOnchainSwap } from "../lib/swapOnchain";
 
 export interface FeeEvent {
@@ -60,7 +61,8 @@ interface TerminalState {
   toggleOracleLive: () => void;
   quote: (amountIn: number, dir: SwapDir) => SwapQuote;
   executeSwap: (amountIn: number, dir: SwapDir) => SwapQuote;
-  resetPool: () => void;
+  resetPool: () => Promise<void>;
+  resetPoolBusy: boolean;
 }
 
 const Ctx = createContext<TerminalState | null>(null);
@@ -72,14 +74,19 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const { data: walletClient } = useWalletClient();
   const [reserves, setReserves] = useState<PoolReserves>(INITIAL_RESERVES);
   const [oraclePrice, setOracle] = useState<number>(INITIAL_ORACLE);
-  const [oracleLive, setOracleLive] = useState<boolean>(true);
+  const [oracleLive, setOracleLive] = useState<boolean>(false);
   const [events, setEvents] = useState<FeeEvent[]>([]);
+  const [resetPoolBusy, setResetPoolBusy] = useState(false);
   const oracleRef = useRef(oraclePrice);
   oracleRef.current = oraclePrice;
 
   const live = useLiveFee(CAN_SWAP_ONCHAIN ? 4000 : 8000);
   const hasLivePool =
-    live.configured && live.poolPrice !== undefined && live.oraclePrice !== undefined;
+    live.configured &&
+    live.poolPrice !== undefined &&
+    live.poolPrice > 0 &&
+    live.oraclePrice !== undefined &&
+    live.oraclePrice > 0;
   const isLive = hasLivePool;
 
   const demoPoolPrice = poolPrice(reserves);
@@ -249,11 +256,26 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     [buildLiveQuoteState, reserves, pushEvent]
   );
 
-  const resetPool = useCallback(() => {
-    setReserves(INITIAL_RESERVES);
-    setOracle(INITIAL_ORACLE);
-    pushEvent(feeForDeviationBps(0), 0, "Pool reset");
-  }, [pushEvent]);
+  const resetPool = useCallback(async () => {
+    setResetPoolBusy(true);
+    try {
+      if (isLive && CAN_SWAP_ONCHAIN) {
+        setOracleLive(false);
+        const synced = await resetForkPoolState(oracleWallet);
+        await queryClient.invalidateQueries();
+        setEvents([]);
+        pushEvent(feeForDeviationBps(0), 0, `Pool reset — oracle synced to $${synced.toFixed(2)}`);
+        return;
+      }
+      setReserves(INITIAL_RESERVES);
+      setOracle(INITIAL_ORACLE);
+      setOracleLive(false);
+      setEvents([]);
+      pushEvent(feeForDeviationBps(0), 0, "Pool reset");
+    } finally {
+      setResetPoolBusy(false);
+    }
+  }, [isLive, queryClient, pushEvent, oracleWallet]);
 
   const value = useMemo<TerminalState>(
     () => ({
@@ -280,6 +302,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       quote,
       executeSwap,
       resetPool,
+      resetPoolBusy,
     }),
     [
       isLive,
@@ -303,6 +326,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       quote,
       executeSwap,
       resetPool,
+      resetPoolBusy,
     ]
   );
 

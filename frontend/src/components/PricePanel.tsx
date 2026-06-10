@@ -15,6 +15,8 @@ export function PricePanel() {
     nudgeOracle,
     nudgePool,
     refreshOracle,
+    resetPool,
+    resetPoolBusy,
     mode,
     isFork,
     canNudgeMockOracle,
@@ -98,6 +100,9 @@ export function PricePanel() {
             <span className="fork-label">Pool</span>
             <button className="btn btn-ghost btn-sm" onClick={() => void nudgePool(3)}>
               Swap 3 WETH ↓
+            </button>
+            <button className="btn btn-ghost btn-sm" disabled={resetPoolBusy} onClick={() => void resetPool()}>
+              {resetPoolBusy ? "Resetting…" : "Reset pool"}
             </button>
           </div>
           <div className="oracle-control">

@@ -1,9 +1,17 @@
-import { useReadContracts } from "wagmi";
-import { encodePacked, keccak256, toHex, type Hex } from "viem";
-import { BASE, ENV, IS_DEMO, poolPriceFromSqrt } from "../config/contracts";
+import { useQuery } from "@tanstack/react-query";
+import type { Hex } from "viem";
+import { BASE, ENV, IS_DEMO } from "../config/contracts";
 import { deviationBps as calcDeviationBps, feeForDeviationBps } from "../lib/feeMath";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { aggregatorAbi, poolManagerAbi } from "../abi/external";
+import {
+  liquidityFromSlot,
+  poolLiquiditySlot,
+  poolPriceFromSlot0,
+  poolStateSlot,
+  parseSlot0,
+} from "../lib/poolState";
+import { createAppPublicClient, requireHex } from "../lib/rpcClient";
 
 export interface LiveFeeSnapshot {
   configured: boolean;
@@ -18,139 +26,113 @@ export interface LiveFeeSnapshot {
   tick?: number;
 }
 
-const POOLS_SLOT = 6n;
-const LIQUIDITY_OFFSET = 3n;
-
-function poolStateSlot(poolId: Hex): Hex {
-  return keccak256(encodePacked(["bytes32", "bytes32"], [poolId, toHex(POOLS_SLOT, { size: 32 })]));
+function decodePreviewError(raw: string, chainId: number): string {
+  if (raw.includes("a887f2d8")) {
+    return chainId === 84532
+      ? "Oracle data is stale — connect wallet and click Refresh oracle."
+      : "Oracle data is stale — run script/setup-fork.sh to reset the fork.";
+  }
+  if (raw.includes("617378d7")) return "Pool price not set — pool missing or not initialized.";
+  if (raw.includes("d15f73b5")) return "Sequencer grace period — wait or reset the fork.";
+  if (raw.includes("032b3d00")) return "Base sequencer is down according to Chainlink feed.";
+  return raw ? `previewFee reverted: ${raw.slice(0, 120)}` : "previewFee reverted (oracle/sequencer/pool guard)";
 }
 
-function poolLiquiditySlot(poolId: Hex): Hex {
-  const state = BigInt(poolStateSlot(poolId));
-  return toHex(state + LIQUIDITY_OFFSET, { size: 32 });
-}
+async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loading">> {
+  const client = createAppPublicClient();
+  const hookAddress = requireHex(ENV.hookAddress, "VITE_HOOK_ADDRESS");
+  const poolId = requireHex(ENV.poolId, "VITE_POOL_ID");
+  const stateSlot = poolStateSlot(poolId);
+  const liqSlot = poolLiquiditySlot(poolId);
 
-function parseSlot0(word: Hex): { sqrtPriceX96: bigint; tick: number } {
-  const data = BigInt(word);
-  const sqrtPriceX96 = data & ((1n << 160n) - 1n);
-  const tickRaw = Number((data >> 160n) & 0xffffffn);
-  const tick = tickRaw >= 0x800000 ? tickRaw - 0x1000000 : tickRaw;
-  return { sqrtPriceX96, tick };
+  const [slotWord, liqWord, oracleRes] = await Promise.all([
+    client.readContract({
+      address: BASE.poolManager,
+      abi: poolManagerAbi,
+      functionName: "extsload",
+      args: [stateSlot],
+    }),
+    client.readContract({
+      address: BASE.poolManager,
+      abi: poolManagerAbi,
+      functionName: "extsload",
+      args: [liqSlot],
+    }),
+    client.readContract({
+      address: BASE.ethUsdFeed,
+      abi: aggregatorAbi,
+      functionName: "latestRoundData",
+    }),
+  ]);
+
+  const slotHex = slotWord as Hex;
+  const { sqrtPriceX96, tick } = parseSlot0(slotHex);
+  const poolPrice = poolPriceFromSlot0(slotHex);
+  const liquidity = liquidityFromSlot(liqWord as Hex);
+  const [, oracleAnswer] = oracleRes;
+  const oraclePrice = Number(oracleAnswer) / 1e8;
+
+  const computedDev =
+    poolPrice !== undefined && oraclePrice > 0
+      ? calcDeviationBps(poolPrice, oraclePrice)
+      : undefined;
+
+  let feePips: number | undefined;
+  let deviationBps: number | undefined;
+  let error: string | undefined;
+
+  try {
+    const [fee, dev] = await client.readContract({
+      address: hookAddress,
+      abi: dynamicLpFeesHookAbi,
+      functionName: "previewFee",
+      args: [poolId],
+    });
+    feePips = Number(fee);
+    deviationBps = Number(dev);
+  } catch (e) {
+    error = decodePreviewError(e instanceof Error ? e.message : String(e), ENV.chainId);
+    feePips = computedDev !== undefined ? feeForDeviationBps(computedDev) : undefined;
+    deviationBps = computedDev;
+  }
+
+  if (poolPrice === undefined) {
+    error = error ?? "Pool sqrtPriceX96 is zero — re-run script/setup-fork.sh";
+  }
+
+  return {
+    error,
+    feePips,
+    deviationBps,
+    oraclePrice,
+    poolPrice,
+    sqrtPriceX96: sqrtPriceX96 > 0n ? sqrtPriceX96 : undefined,
+    liquidity,
+    tick,
+  };
 }
 
 export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
   const configured = !IS_DEMO && !!ENV.hookAddress && !!ENV.poolId;
-  const poolId = ENV.poolId as Hex;
 
-  const chainId = ENV.chainId as 8453 | 84532;
-
-  const { data, isLoading, error } = useReadContracts({
-    contracts: [
-      {
-        chainId,
-        address: ENV.hookAddress as `0x${string}`,
-        abi: dynamicLpFeesHookAbi,
-        functionName: "previewFee",
-        args: [poolId],
-      },
-      {
-        chainId,
-        address: BASE.ethUsdFeed,
-        abi: aggregatorAbi,
-        functionName: "latestRoundData",
-      },
-      {
-        chainId,
-        address: BASE.poolManager,
-        abi: poolManagerAbi,
-        functionName: "extsload",
-        args: [configured ? poolStateSlot(poolId) : ("0x".padEnd(66, "0") as Hex)],
-      },
-      {
-        chainId,
-        address: BASE.poolManager,
-        abi: poolManagerAbi,
-        functionName: "extsload",
-        args: [configured ? poolLiquiditySlot(poolId) : ("0x".padEnd(66, "0") as Hex)],
-      },
-    ],
-    query: {
-      enabled: configured,
-      refetchInterval: pollMs,
-      refetchOnWindowFocus: true,
-    },
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["liveFee", ENV.chainId, ENV.hookAddress, ENV.poolId, ENV.baseRpcUrl],
+    queryFn: fetchLiveFee,
+    enabled: configured,
+    refetchInterval: pollMs,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
 
   if (!configured) return { configured: false, loading: false };
   if (isLoading) return { configured: true, loading: true };
-  if (error) return { configured: true, loading: false, error: error.message };
-
-  const previewRes = data?.[0];
-  const oracleRes = data?.[1];
-  const slotRes = data?.[2];
-  const liqRes = data?.[3];
-
-  const oracleAnswer = (oracleRes?.result as readonly [bigint, bigint, bigint, bigint, bigint] | undefined)?.[1];
-
-  let sqrtPriceX96: bigint | undefined;
-  let tick: number | undefined;
-  let poolPrice: number | undefined;
-  if (slotRes?.result) {
-    const parsed = parseSlot0(slotRes.result as Hex);
-    sqrtPriceX96 = parsed.sqrtPriceX96;
-    tick = parsed.tick;
-    poolPrice = poolPriceFromSqrt(sqrtPriceX96);
-  }
-
-  let liquidity: bigint | undefined;
-  if (liqRes?.result) {
-    liquidity = BigInt(liqRes.result as Hex) & ((1n << 128n) - 1n);
-  }
-
-  const oraclePrice = oracleAnswer !== undefined ? Number(oracleAnswer) / 1e8 : undefined;
-  const computedDev =
-    poolPrice !== undefined && oraclePrice !== undefined
-      ? calcDeviationBps(poolPrice, oraclePrice)
-      : undefined;
-
-  if (previewRes?.status === "failure") {
-    const raw = String(previewRes.error ?? "");
-    const msg = raw.includes("a887f2d8")
-      ? chainId === 84532
-        ? "Oracle data is stale — connect wallet and click Refresh oracle."
-        : "Oracle data is stale on the fork — run script/setup-fork.sh to reset."
-      : raw.includes("617378d7")
-        ? "Pool price not set — pool missing or not initialized."
-        : raw.includes("d15f73b5")
-          ? "Sequencer grace period — wait or reset the fork."
-          : raw.includes("032b3d00")
-            ? "Base sequencer is down according to Chainlink feed."
-            : "previewFee reverted (oracle/sequencer/pool guard)";
+  if (error) {
     return {
       configured: true,
       loading: false,
-      error: msg,
-      feePips: computedDev !== undefined ? feeForDeviationBps(computedDev) : undefined,
-      deviationBps: computedDev,
-      oraclePrice,
-      poolPrice,
-      sqrtPriceX96,
-      liquidity,
-      tick,
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 
-  const [feePips, deviationBps] = (previewRes?.result as readonly [number, bigint]) ?? [undefined, undefined];
-
-  return {
-    configured: true,
-    loading: false,
-    feePips: feePips !== undefined ? Number(feePips) : undefined,
-    deviationBps: deviationBps !== undefined ? Number(deviationBps) : undefined,
-    oraclePrice,
-    poolPrice,
-    sqrtPriceX96,
-    liquidity,
-    tick,
-  };
+  return { configured: true, loading: false, ...data! };
 }
