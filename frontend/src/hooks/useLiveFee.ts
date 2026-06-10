@@ -1,6 +1,7 @@
 import { useReadContracts } from "wagmi";
 import { encodePacked, keccak256, toHex, type Hex } from "viem";
 import { BASE, ENV, IS_DEMO, poolPriceFromSqrt } from "../config/contracts";
+import { deviationBps as calcDeviationBps, feeForDeviationBps } from "../lib/feeMath";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { aggregatorAbi, poolManagerAbi } from "../abi/external";
 
@@ -107,6 +108,10 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
   }
 
   const oraclePrice = oracleAnswer !== undefined ? Number(oracleAnswer) / 1e8 : undefined;
+  const computedDev =
+    poolPrice !== undefined && oraclePrice !== undefined
+      ? calcDeviationBps(poolPrice, oraclePrice)
+      : undefined;
 
   if (previewRes?.status === "failure") {
     const raw = String(previewRes.error ?? "");
@@ -125,6 +130,8 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
       configured: true,
       loading: false,
       error: msg,
+      feePips: computedDev !== undefined ? feeForDeviationBps(computedDev) : undefined,
+      deviationBps: computedDev,
       oraclePrice,
       poolPrice,
       sqrtPriceX96,

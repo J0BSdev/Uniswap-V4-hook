@@ -75,19 +75,21 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   oracleRef.current = oraclePrice;
 
   const live = useLiveFee(CAN_SWAP_ONCHAIN ? 4000 : 8000);
-  const hasLivePool = live.configured && live.poolPrice !== undefined;
-  const isLive = hasLivePool && (live.feePips !== undefined || !!live.error);
+  const hasLivePool =
+    live.configured && live.poolPrice !== undefined && live.oraclePrice !== undefined;
+  const isLive = hasLivePool;
 
   // Demo-derived values (used in demo mode and for the what-if swap simulator).
   const demoPoolPrice = poolPrice(reserves);
   const demoDev = deviationBps(demoPoolPrice, oraclePrice);
 
   // Displayed values prefer live on-chain data when a hook is configured.
-  const pPrice = isLive && live.poolPrice !== undefined ? live.poolPrice : demoPoolPrice;
-  const dispOracle = isLive && live.oraclePrice !== undefined ? live.oraclePrice : oraclePrice;
-  const dev = isLive && live.deviationBps !== undefined ? live.deviationBps : demoDev;
-  const feePips = isLive && live.feePips !== undefined ? live.feePips : feeForDeviationBps(demoDev);
-  const tier = tierForDeviationBps(isLive && live.deviationBps !== undefined ? live.deviationBps : dev);
+  const pPrice = isLive ? live.poolPrice! : demoPoolPrice;
+  const dispOracle = isLive ? live.oraclePrice! : oraclePrice;
+  const liveDev = deviationBps(pPrice, dispOracle);
+  const dev = isLive ? (live.deviationBps ?? liveDev) : demoDev;
+  const feePips = isLive ? (live.feePips ?? feeForDeviationBps(liveDev)) : feeForDeviationBps(demoDev);
+  const tier = tierForDeviationBps(dev);
 
   const oracleWallet = CAN_NUDGE_MOCK_ORACLE ? walletClient : undefined;
 
@@ -187,10 +189,9 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const liveQuoteState = () => {
     if (
       !isLive ||
-      live.poolPrice === undefined ||
       live.sqrtPriceX96 === undefined ||
       live.liquidity === undefined ||
-      live.deviationBps === undefined ||
+      live.poolPrice === undefined ||
       ENV.lpTickLower === 0 ||
       ENV.lpTickUpper === 0
     ) {
@@ -202,7 +203,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       tickLower: ENV.lpTickLower,
       tickUpper: ENV.lpTickUpper,
       poolPrice: live.poolPrice,
-      deviationBpsBefore: live.deviationBps,
+      deviationBpsBefore: live.deviationBps ?? liveDev,
       oraclePrice: dispOracle,
     };
   };
@@ -220,6 +221,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       live.sqrtPriceX96,
       live.liquidity,
       live.deviationBps,
+      liveDev,
       dispOracle,
       reserves,
       oraclePrice,
@@ -254,6 +256,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       live.sqrtPriceX96,
       live.liquidity,
       live.deviationBps,
+      liveDev,
       dispOracle,
       reserves,
       pushEvent,
