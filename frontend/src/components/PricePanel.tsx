@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useTerminal } from "../state/TerminalContext";
-import { fmtBps, fmtUsd } from "../lib/format";
+import { fmtBps, fmtNum, fmtUsd } from "../lib/format";
 
 export function PricePanel() {
   const {
     poolPrice,
     oraclePrice,
     deviationBps,
+    clReserves,
+    liquidity,
     oracleLive,
     toggleOracleLive,
     setOraclePrice,
@@ -57,8 +59,15 @@ export function PricePanel() {
         <div className="price-cell">
           <span className="price-label">Chainlink ETH/USD</span>
           <span className="price-value">{fmtUsd(oraclePrice)}</span>
-          <span className="price-sub">{canNudgeMockOracle ? "mock oracle · Sepolia" : "reference oracle"}</span>
+          <span className="price-sub">{isFork ? "mock oracle · fork" : canNudgeMockOracle ? "mock oracle · Sepolia" : "reference oracle"}</span>
         </div>
+        {clReserves && (
+          <div className="price-cell">
+            <span className="price-label">CL depth (seeded range)</span>
+            <span className="price-value">{fmtNum(clReserves.weth)} WETH</span>
+            <span className="price-sub">{fmtNum(clReserves.usdc)} USDC · L={liquidity.toString()}</span>
+          </div>
+        )}
       </div>
 
       <div className="dev-row">
