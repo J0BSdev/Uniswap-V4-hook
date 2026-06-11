@@ -309,7 +309,9 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     }
 
     function _deployWethUsdc() internal {
-        deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("WETH", "WETH", uint8(18)), WETH);
+        deployCodeTo(
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("WETH", "WETH", uint8(18)), WETH
+        );
         deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("USDC", "USDC", uint8(6)), USDC);
         MockERC20(WETH).mint(address(this), 1_000_000 ether);
         MockERC20(USDC).mint(address(this), 1_000_000_000e6);
@@ -336,11 +338,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
         address hookAddress = address(flags);
-        deployCodeTo(
-            "DynamicLPFeesHook.sol",
-            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
-            hookAddress
-        );
+        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED), hookAddress);
         hook = DynamicLPFeesHook(hookAddress);
     }
 

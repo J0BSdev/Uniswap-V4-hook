@@ -31,10 +31,7 @@ contract DeployBaseSepolia is Script {
     address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
     int24 internal constant TICK_SPACING = 60;
 
-    function run()
-        external
-        returns (address hookAddress, bytes32 poolId, address priceFeed, address sequencerFeed)
-    {
+    function run() external returns (address hookAddress, bytes32 poolId, address priceFeed, address sequencerFeed) {
         NetworkConfig.Config memory cfg = NetworkConfig.baseSepolia();
         int256 oraclePrice8 = vm.envOr("ORACLE_PRICE8", cfg.defaultOraclePrice8);
 
@@ -47,10 +44,7 @@ contract DeployBaseSepolia is Script {
         _logResults(cfg, hookAddress, poolId, priceFeed, sequencerFeed);
     }
 
-    function _deployMocks(int256 oraclePrice8)
-        internal
-        returns (address priceFeed, address sequencerFeed)
-    {
+    function _deployMocks(int256 oraclePrice8) internal returns (address priceFeed, address sequencerFeed) {
         MockChainlinkAggregator priceMock = new MockChainlinkAggregator();
         MockChainlinkAggregator sequencerMock = new MockChainlinkAggregator();
         priceFeed = address(priceMock);
@@ -67,16 +61,14 @@ contract DeployBaseSepolia is Script {
     {
         IPoolManager manager = IPoolManager(cfg.poolManager);
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        bytes memory constructorArgs =
-            abi.encode(manager, cfg.weth, cfg.usdc, priceFeed, sequencerFeed);
+        bytes memory constructorArgs = abi.encode(manager, cfg.weth, cfg.usdc, priceFeed, sequencerFeed);
 
         (address mined, bytes32 salt) =
             HookMiner.find(CREATE2_DEPLOYER, flags, type(DynamicLPFeesHook).creationCode, constructorArgs);
         console2.log("Mined hook address:", mined);
 
-        DynamicLPFeesHook hook = new DynamicLPFeesHook{salt: salt}(
-            manager, cfg.weth, cfg.usdc, priceFeed, sequencerFeed
-        );
+        DynamicLPFeesHook hook =
+            new DynamicLPFeesHook{salt: salt}(manager, cfg.weth, cfg.usdc, priceFeed, sequencerFeed);
         require(address(hook) == mined, "DeployScript: hook address mismatch");
         hookAddress = address(hook);
     }
@@ -129,5 +121,4 @@ contract DeployBaseSepolia is Script {
         console2.log("  VITE_POOL_MANAGER =", cfg.poolManager);
         console2.log("==========================================================");
     }
-
 }

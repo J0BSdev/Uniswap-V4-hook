@@ -65,10 +65,7 @@ contract SeedLiquidity is Script {
         lp.modifyLiquidity(
             key,
             ModifyLiquidityParams({
-                tickLower: lower,
-                tickUpper: upper,
-                liquidityDelta: int256(uint256(liquidity)),
-                salt: bytes32(0)
+                tickLower: lower, tickUpper: upper, liquidityDelta: int256(uint256(liquidity)), salt: bytes32(0)
             }),
             ""
         );
@@ -98,20 +95,15 @@ contract SeedLiquidity is Script {
         return NetworkConfig.baseMainnet();
     }
 
-    function _liquidityForSeed(
-        NetworkConfig.Config memory cfg,
-        uint160 sqrtPriceX96,
-        int24 lower,
-        int24 upper
-    ) internal view returns (uint128) {
+    function _liquidityForSeed(NetworkConfig.Config memory cfg, uint160 sqrtPriceX96, int24 lower, int24 upper)
+        internal
+        view
+        returns (uint128)
+    {
         bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
         (uint256 amount0, uint256 amount1) = _seedAmounts(wethToken0);
         return LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lower),
-            TickMath.getSqrtPriceAtTick(upper),
-            amount0,
-            amount1
+            sqrtPriceX96, TickMath.getSqrtPriceAtTick(lower), TickMath.getSqrtPriceAtTick(upper), amount0, amount1
         );
     }
 

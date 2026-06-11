@@ -60,13 +60,9 @@ contract DynamicLPFeesHook is BaseHook {
     // riskScoreBps = max(oracle deviation, tradeSize/liquidity) used for the tier
     event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 riskScoreBps);
 
-    constructor(
-        IPoolManager _manager,
-        address _weth,
-        address _usdc,
-        address _priceFeed,
-        address _sequencerFeed
-    ) BaseHook(_manager) {
+    constructor(IPoolManager _manager, address _weth, address _usdc, address _priceFeed, address _sequencerFeed)
+        BaseHook(_manager)
+    {
         WETH = _weth;
         USDC = _usdc;
         wethIsCurrency0 = _weth < _usdc;

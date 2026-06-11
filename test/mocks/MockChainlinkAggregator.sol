@@ -29,11 +29,7 @@ contract MockChainlinkAggregator {
         answeredInRound = answeredInRoundOverride == 0 ? roundId : answeredInRoundOverride;
     }
 
-    function latestRoundData()
-        external
-        view
-        returns (uint80, int256, uint256, uint256, uint80)
-    {
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
         return (roundId, answer, startedAt, updatedAt, answeredInRound);
     }
 

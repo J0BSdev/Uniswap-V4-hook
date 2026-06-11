@@ -199,7 +199,13 @@ contract DynamicLPFeesHookTest is Test, Deployers {
         _setOraclePrice(ORACLE_ETH_USD);
         deployMintAndApprove2Currencies();
         _expectInitializeRevert(DynamicLPFeesHook.InvalidPoolPair.selector);
-        initPool(currency0, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, encodeSqrtPriceX96(ORACLE_ETH_USD));
+        initPool(
+            currency0,
+            currency1,
+            IHooks(address(hook)),
+            LPFeeLibrary.DYNAMIC_FEE_FLAG,
+            encodeSqrtPriceX96(ORACLE_ETH_USD)
+        );
     }
 
     function test_reverts_ifCurrenciesAreReversed() public {
@@ -213,11 +219,7 @@ contract DynamicLPFeesHookTest is Test, Deployers {
         });
 
         // PoolManager rejects out-of-order currencies before the hook runs
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IPoolManager.CurrenciesOutOfOrderOrEqual.selector, USDC, WETH
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(IPoolManager.CurrenciesOutOfOrderOrEqual.selector, USDC, WETH));
         manager.initialize(badKey, encodeSqrtPriceX96(ORACLE_ETH_USD));
     }
 
@@ -287,9 +289,7 @@ contract DynamicLPFeesHookTest is Test, Deployers {
     function test_previewFee_succeeds_whenOracleAtStalenessBoundary() public {
         _initPoolAtOraclePrice();
         priceFeed.setRound(
-            int256(ORACLE_ETH_USD),
-            block.timestamp - 5000,
-            block.timestamp - hook.MAX_ORACLE_STALENESS()
+            int256(ORACLE_ETH_USD), block.timestamp - 5000, block.timestamp - hook.MAX_ORACLE_STALENESS()
         );
         (uint24 fee,) = hook.previewFee(poolId);
         assertEq(fee, hook.LOW_FEE());
@@ -298,9 +298,7 @@ contract DynamicLPFeesHookTest is Test, Deployers {
     function test_reverts_ifOracleJustPastStalenessBoundary() public {
         _initPoolAtOraclePrice();
         priceFeed.setRound(
-            int256(ORACLE_ETH_USD),
-            block.timestamp - 5000,
-            block.timestamp - hook.MAX_ORACLE_STALENESS() - 1
+            int256(ORACLE_ETH_USD), block.timestamp - 5000, block.timestamp - hook.MAX_ORACLE_STALENESS() - 1
         );
         vm.expectRevert(DynamicLPFeesHook.StaleOraclePrice.selector);
         hook.previewFee(poolId);
@@ -474,9 +472,7 @@ contract DynamicLPFeesHookTest is Test, Deployers {
         _setOraclePrice(ORACLE_ETH_USD);
         address wrongUsdc = 0x833589fcD6EdB6e08f4C7C32d4F71b54BdA02914;
         deployCodeTo(
-            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20",
-            abi.encode("FAKE", "FAKE", uint8(6)),
-            wrongUsdc
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("FAKE", "FAKE", uint8(6)), wrongUsdc
         );
 
         PoolKey memory badKey = PoolKey({
@@ -524,11 +520,8 @@ contract DynamicLPFeesHookTest is Test, Deployers {
     function test_swap_reverts_whenPriceHitsMinLimit_andPoolPriceRoundsToZero() public {
         _initPoolAtOraclePrice();
         _addLiquidity();
-        SwapParams memory params = SwapParams({
-            zeroForOne: true,
-            amountSpecified: -100 ether,
-            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-        });
+        SwapParams memory params =
+            SwapParams({zeroForOne: true, amountSpecified: -100 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1});
         swapRouter.swap(key, params, defaultSettings, ZERO_BYTES);
         _expectSwapRevert(DynamicLPFeesHook.PoolPriceNotSet.selector);
         _swap(true, -0.001 ether);
@@ -656,15 +649,9 @@ contract DynamicLPFeesHookTest is Test, Deployers {
 
     function _deployWethUsdc() internal {
         deployCodeTo(
-            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20",
-            abi.encode("WETH", "WETH", uint8(18)),
-            WETH
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("WETH", "WETH", uint8(18)), WETH
         );
-        deployCodeTo(
-            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20",
-            abi.encode("USDC", "USDC", uint8(6)),
-            USDC
-        );
+        deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("USDC", "USDC", uint8(6)), USDC);
 
         MockERC20(WETH).mint(address(this), 10_000 ether);
         MockERC20(USDC).mint(address(this), 10_000_000e6);
@@ -693,11 +680,7 @@ contract DynamicLPFeesHookTest is Test, Deployers {
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
         address hookAddress = address(flags);
-        deployCodeTo(
-            "DynamicLPFeesHook.sol",
-            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
-            hookAddress
-        );
+        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED), hookAddress);
         hook = DynamicLPFeesHook(hookAddress);
     }
 
@@ -731,20 +714,13 @@ contract DynamicLPFeesHookTest is Test, Deployers {
         int24 upper = ((tick + 120) / spacing) * spacing;
 
         uint128 liquidityDelta = LiquidityAmounts.getLiquidityForAmounts(
-            sqrtPriceX96,
-            TickMath.getSqrtPriceAtTick(lower),
-            TickMath.getSqrtPriceAtTick(upper),
-            1 ether,
-            3500e6
+            sqrtPriceX96, TickMath.getSqrtPriceAtTick(lower), TickMath.getSqrtPriceAtTick(upper), 1 ether, 3500e6
         );
 
         modifyLiquidityRouter.modifyLiquidity(
             key,
             ModifyLiquidityParams({
-                tickLower: lower,
-                tickUpper: upper,
-                liquidityDelta: int128(liquidityDelta),
-                salt: bytes32(0)
+                tickLower: lower, tickUpper: upper, liquidityDelta: int128(liquidityDelta), salt: bytes32(0)
             }),
             ZERO_BYTES
         );

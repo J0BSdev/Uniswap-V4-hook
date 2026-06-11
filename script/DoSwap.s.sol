@@ -31,9 +31,8 @@ contract DoSwap is Script {
     function run() external {
         address hookAddr = vm.envAddress("HOOK_ADDR");
         PoolSwapTest swapRouter = PoolSwapTest(vm.envAddress("SWAP_ROUTER"));
-        NetworkConfig.Config memory cfg = vm.envOr("USE_SEPOLIA", false)
-            ? NetworkConfig.baseSepolia()
-            : NetworkConfig.baseMainnet();
+        NetworkConfig.Config memory cfg =
+            vm.envOr("USE_SEPOLIA", false) ? NetworkConfig.baseSepolia() : NetworkConfig.baseMainnet();
         IPoolManager manager = IPoolManager(cfg.poolManager);
 
         PoolKey memory key = PoolKey({
@@ -53,9 +52,7 @@ contract DoSwap is Script {
         // Sell 1 WETH (exact input).
         bool zeroForOne = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
         SwapParams memory params = SwapParams({
-            zeroForOne: zeroForOne,
-            amountSpecified: -1 ether,
-            sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            zeroForOne: zeroForOne, amountSpecified: -1 ether, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
         });
 
         vm.recordLogs();

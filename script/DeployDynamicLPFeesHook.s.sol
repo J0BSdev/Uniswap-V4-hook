@@ -42,9 +42,7 @@ contract DeployDynamicLPFeesHook is Script {
 
         // The deployed address must encode beforeInitialize + beforeSwap in its low bits.
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
-        bytes memory constructorArgs = abi.encode(
-            manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed
-        );
+        bytes memory constructorArgs = abi.encode(manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed);
 
         (address mined, bytes32 salt) =
             HookMiner.find(CREATE2_DEPLOYER, flags, type(DynamicLPFeesHook).creationCode, constructorArgs);
@@ -56,9 +54,8 @@ contract DeployDynamicLPFeesHook is Script {
 
         vm.startBroadcast();
 
-        DynamicLPFeesHook hook = new DynamicLPFeesHook{salt: salt}(
-            manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed
-        );
+        DynamicLPFeesHook hook =
+            new DynamicLPFeesHook{salt: salt}(manager, cfg.weth, cfg.usdc, cfg.ethUsdFeed, cfg.sequencerFeed);
         require(address(hook) == mined, "DeployScript: hook address mismatch");
 
         PoolKey memory key = PoolKey({

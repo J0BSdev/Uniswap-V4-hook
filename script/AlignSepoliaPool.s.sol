@@ -86,10 +86,7 @@ contract AlignSepoliaPool is Script {
         lp.modifyLiquidity(
             key,
             ModifyLiquidityParams({
-                tickLower: lower,
-                tickUpper: upper,
-                liquidityDelta: int256(uint256(seedLiq)),
-                salt: bytes32(0)
+                tickLower: lower, tickUpper: upper, liquidityDelta: int256(uint256(seedLiq)), salt: bytes32(0)
             }),
             ""
         );
@@ -119,7 +116,9 @@ contract AlignSepoliaPool is Script {
             console2.log("Swap USDC in:", uint256(-usdcIn), "diffBps:", diffBps);
             swapRouter.swap(
                 key,
-                SwapParams({zeroForOne: zeroForOne, amountSpecified: usdcIn, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1}),
+                SwapParams({
+                    zeroForOne: zeroForOne, amountSpecified: usdcIn, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+                }),
                 PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
                 ""
             );

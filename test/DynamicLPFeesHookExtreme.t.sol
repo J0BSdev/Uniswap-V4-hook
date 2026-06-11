@@ -225,11 +225,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         assertEq(scoreA, scoreB);
     }
 
-    function testFuzz_appliedFeeMatchesPreviewExtreme(
-        uint256 deltaBps,
-        int256 amount,
-        bool zeroForOne
-    ) public {
+    function testFuzz_appliedFeeMatchesPreviewExtreme(uint256 deltaBps, int256 amount, bool zeroForOne) public {
         deltaBps = bound(deltaBps, 0, 3000);
         amount = bound(amount, -100 ether, 100 ether);
         vm.assume(amount != 0);
@@ -280,6 +276,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         uint256 diff = pool8 > ORACLE ? pool8 - ORACLE : ORACLE - pool8;
         assertEq(bps, diff * 10_000 / ORACLE);
     }
+
     function testFuzz_sizeRatioReference(uint256 tradeSize) public {
         tradeSize = bound(tradeSize, 1, type(uint256).max / 10_000);
         _initParity();
@@ -316,12 +313,12 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
     function test_wrongPair_revertsOnInit() public {
         address daiAddr = address(0xDA1);
         deployCodeTo(
-            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20",
-            abi.encode("DAI", "DAI", uint8(18)),
-            daiAddr
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("DAI", "DAI", uint8(18)), daiAddr
         );
         vm.expectRevert();
-        initPool(Currency.wrap(daiAddr), currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE));
+        initPool(
+            Currency.wrap(daiAddr), currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE)
+        );
     }
 
     function testFuzz_emptyPoolId_reverts(bytes32 rawId) public {
@@ -481,9 +478,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
         deployCodeTo(
-            "DynamicLPFeesHook.sol",
-            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
-            address(flags)
+            "DynamicLPFeesHook.sol", abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED), address(flags)
         );
         hook = DynamicLPFeesHook(address(flags));
     }

@@ -75,8 +75,7 @@ contract InvariantHandler is Test {
             amountSpecified: -int256(amount),
             sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
         });
-        PoolSwapTest.TestSettings memory s =
-            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+        PoolSwapTest.TestSettings memory s = PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
         // swaps may revert (price limit / liquidity / extreme price) — that's fine
         try swapRouter.swap(key, params, s, "") {
             swaps++;
@@ -111,8 +110,9 @@ contract DynamicLPFeesHookInvariant is Test, Deployers {
         _deployHook();
 
         _setOraclePrice(ORACLE_ETH_USD);
-        (key, poolId) =
-            initPool(currency0, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE_ETH_USD));
+        (key, poolId) = initPool(
+            currency0, currency1, IHooks(address(hook)), LPFeeLibrary.DYNAMIC_FEE_FLAG, _encode(ORACLE_ETH_USD)
+        );
         _seedWideLiquidity();
 
         handler = new InvariantHandler(IPoolManager(address(manager)), hook, priceFeed, swapRouter, key, WETH, USDC);
@@ -205,7 +205,9 @@ contract DynamicLPFeesHookInvariant is Test, Deployers {
     }
 
     function _deployWethUsdc() internal {
-        deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("WETH", "WETH", uint8(18)), WETH);
+        deployCodeTo(
+            "solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("WETH", "WETH", uint8(18)), WETH
+        );
         deployCodeTo("solmate/src/test/utils/mocks/MockERC20.sol:MockERC20", abi.encode("USDC", "USDC", uint8(6)), USDC);
 
         MockERC20(WETH).mint(address(this), 1_000_000 ether);
@@ -220,11 +222,7 @@ contract DynamicLPFeesHookInvariant is Test, Deployers {
     function _deployHook() internal {
         uint160 flags = uint160(Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG);
         address hookAddress = address(flags);
-        deployCodeTo(
-            "DynamicLPFeesHook.sol",
-            abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED),
-            hookAddress
-        );
+        deployCodeTo("DynamicLPFeesHook.sol", abi.encode(manager, WETH, USDC, PRICE_FEED, SEQUENCER_FEED), hookAddress);
         hook = DynamicLPFeesHook(hookAddress);
     }
 
