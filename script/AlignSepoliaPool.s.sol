@@ -154,12 +154,14 @@ contract AlignSepoliaPool is Script {
         IERC20Minimal(cfg.usdc).approve(spender, type(uint256).max);
     }
 
-    function _swapUsdcAmount(uint256 diffBps) internal pure returns (uint256) {
-        if (diffBps > 5000) return 2500e6;
-        if (diffBps > 2000) return 1200e6;
-        if (diffBps > 1000) return 600e6;
-        if (diffBps > 500) return 250e6;
-        return 80e6;
+    function _swapUsdcAmount(uint256 diffBps, uint256 maxUsdc) internal pure returns (uint256) {
+        uint256 want;
+        if (diffBps > 5000) want = 2500e6;
+        else if (diffBps > 2000) want = 1200e6;
+        else if (diffBps > 1000) want = 600e6;
+        else if (diffBps > 500) want = 250e6;
+        else want = 80e6;
+        return want > maxUsdc ? maxUsdc : want;
     }
 
     function _poolPrice8(uint160 sqrtPriceX96, bool wethToken0) internal pure returns (uint256) {
