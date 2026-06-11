@@ -79,6 +79,8 @@ The current implementation focuses on:
 * validating oracle and sequencer safety
 * testing normal, risky and edge-case scenarios
 
+
+
 ## Roadmap
 
 * Add liquidity-aware risk scoring
@@ -87,3 +89,73 @@ The current implementation focuses on:
 * Add optional multi-oracle support
 * Add gas benchmarks
 * Expand test coverage
+
+
+
+## Try the demo (fork)
+
+Interactive demo on a **local Base mainnet fork** — no MetaMask, no testnet ETH. Fee tiers react to oracle vs pool divergence in real time.
+
+### Prerequisites
+
+* [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, `anvil`)
+* Node.js 18+ and `npm`
+
+### 1. Contract tests
+
+```bash
+forge test
+```
+
+All hook tests should pass (159+).
+
+### 2. Start the fork demo
+
+From the repo root:
+
+```bash
+bash script/setup-fork.sh
+cd frontend && npm install && npm run dev:fork
+```
+
+Open **http://127.0.0.1:5173/**
+
+`setup-fork.sh` starts anvil (Base fork), deploys the hook + WETH/USDC pool, installs a controllable mock Chainlink feed, and writes `frontend/.env.fork.local`.
+
+### 3. Manual test checklist
+
+Use the UI at http://127.0.0.1:5173/:
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 1 | Load page | Fee gauge ~**0.5%**, divergence ~**0 bps**, pool ≈ Chainlink ETH/USD |
+| 2 | Click **+1%** (oracle) | Fee rises to **1%** (elevated tier), divergence ~100 bps |
+| 3 | Click **Align to Chainlink** | Fee back to **0.5%**, divergence ~0 |
+| 4 | Click **+1%** again, then **−1%** | Fee tier moves up/down with oracle |
+| 5 | Enter swap amount, click **Swap** | On-chain swap confirms; activity feed shows applied fee |
+
+Fee comes from the hook’s on-chain `previewFee` (oracle deviation only). The swap card quote uses the same tier.
+
+### 4. Optional: CLI sanity check
+
+After `setup-fork.sh`, with addresses from `frontend/.env.fork.local`:
+
+```bash
+source frontend/.env.fork.local
+cast call $VITE_HOOK_ADDRESS \
+  "previewFee(bytes32)(uint24,uint256)" $VITE_POOL_ID \
+  --rpc-url $VITE_BASE_RPC_URL
+# → 5000 0  (0.5% fee, 0 bps deviation when aligned)
+```
+
+### Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Page shows demo mode, no fork controls | Re-run `bash script/setup-fork.sh`, then `npm run dev:fork` |
+| Align / oracle buttons error | Hard refresh (Ctrl+Shift+R); ensure anvil is running on `:8545` |
+| Stale oracle / weird fees | Re-run `bash script/setup-fork.sh` (resets fork state) |
+
+### Base Sepolia (testnet)
+
+For a live testnet deploy (MetaMask, real RPC), use `.env` + deploy scripts — see `script/DeployBaseSepolia.s.sol` and `script/verify-sepolia.sh`. The fork demo above is the recommended path for reviewers.
