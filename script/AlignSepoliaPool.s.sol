@@ -54,22 +54,47 @@ contract AlignSepoliaPool is Script {
         internal
         returns (PoolSwapTest swapRouter)
     {
-        IPoolManager manager = IPoolManager(cfg.poolManager);
         PoolKey memory key = _poolKey(cfg, hookAddr);
-        if (manager.getLiquidity(key.toId()) > 0) {
-            swapRouter = PoolSwapTest(vm.envAddress("SWAP_ROUTER"));
-            _approvePair(cfg, address(swapRouter));
-            return swapRouter;
+
+        address swapRouterAddr = vm.envOr("SWAP_ROUTER", address(0));
+        if (swapRouterAddr == address(0) || swapRouterAddr.code.length == 0) {
+            swapRouter = new PoolSwapTest(IPoolManager(cfg.poolManager));
+            console2.log("PoolSwapTest:", address(swapRouter));
+        } else {
+            swapRouter = PoolSwapTest(swapRouterAddr);
         }
 
-        console2.log("No liquidity - seeding pool...");
-        (uint160 sqrtPriceX96, int24 tick,,) = manager.getSlot0(key.toId());
-        int24 lower = ((tick / TICK_SPACING) - TICK_UNITS) * TICK_SPACING;
-        int24 upper = ((tick / TICK_SPACING) + TICK_UNITS) * TICK_SPACING;
-        bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
+        _approvePair(cfg, address(swapRouter));
+        _seedBridgingLiquidity(cfg, key, oraclePrice8);
+    }
 
-        uint256 wethAmt = vm.envOr("SEED_WETH_WEI", uint256(0.00003 ether));
-        uint256 usdcAmt = vm.envOr("SEED_USDC", FullMath.mulDiv(wethAmt, uint256(oraclePrice8), 1e20));
+    function _seedBridgingLiquidity(NetworkConfig.Config memory cfg, PoolKey memory key, int256 oraclePrice8)
+        internal
+    {
+        IPoolManager manager = IPoolManager(cfg.poolManager);
+        (uint160 sqrtPriceX96, int24 tick,,) = manager.getSlot0(key.toId());
+        bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
+        int24 targetTick = TickMath.getTickAtSqrtPrice(NetworkConfig.sqrtPriceFromOracle(oraclePrice8, wethToken0));
+
+        int24 lower = ((tick < targetTick ? tick : targetTick) / TICK_SPACING - 1) * TICK_SPACING;
+        int24 upper = ((tick > targetTick ? tick : targetTick) / TICK_SPACING + 1) * TICK_SPACING;
+        if (lower >= upper) return;
+
+        _addLiquidityInRange(cfg, key, sqrtPriceX96, lower, upper, wethToken0);
+    }
+
+    function _addLiquidityInRange(
+        NetworkConfig.Config memory cfg,
+        PoolKey memory key,
+        uint160 sqrtPriceX96,
+        int24 lower,
+        int24 upper,
+        bool wethToken0
+    ) internal {
+        uint256 wethAmt = (IERC20Minimal(cfg.weth).balanceOf(msg.sender) * 90) / 100;
+        uint256 usdcAmt = (IERC20Minimal(cfg.usdc).balanceOf(msg.sender) * 90) / 100;
+        if (wethAmt < 1e12 && usdcAmt < 1e4) return;
+
         uint128 seedLiq = LiquidityAmounts.getLiquidityForAmounts(
             sqrtPriceX96,
             TickMath.getSqrtPriceAtTick(lower),
@@ -77,12 +102,11 @@ contract AlignSepoliaPool is Script {
             wethToken0 ? wethAmt : usdcAmt,
             wethToken0 ? usdcAmt : wethAmt
         );
+        if (seedLiq == 0) return;
 
+        IPoolManager manager = IPoolManager(cfg.poolManager);
         PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(manager);
-        swapRouter = new PoolSwapTest(manager);
         _approvePair(cfg, address(lp));
-        _approvePair(cfg, address(swapRouter));
-
         lp.modifyLiquidity(
             key,
             ModifyLiquidityParams({
@@ -90,16 +114,15 @@ contract AlignSepoliaPool is Script {
             }),
             ""
         );
-        console2.log("Seeded liquidity:", uint256(seedLiq));
-        console2.log("PoolSwapTest:", address(swapRouter));
+        console2.log("Bridging liquidity:", uint256(seedLiq));
     }
 
     function _alignPoolPrice(address poolManager, PoolSwapTest swapRouter, address hookAddr, int256 oraclePrice8)
         internal
     {
         NetworkConfig.Config memory cfg = NetworkConfig.baseSepolia();
-        uint256 usdcBal = IERC20Minimal(cfg.usdc).balanceOf(msg.sender);
-        if (usdcBal < 1e4) return;
+        uint256 wethBal = IERC20Minimal(cfg.weth).balanceOf(msg.sender);
+        if (wethBal < 1e12) return;
 
         _runAlignSwaps(
             IPoolManager(poolManager),
@@ -107,7 +130,7 @@ contract AlignSepoliaPool is Script {
             _poolKey(cfg, hookAddr),
             NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc),
             uint256(oraclePrice8),
-            usdcBal
+            wethBal
         );
     }
 
@@ -117,34 +140,40 @@ contract AlignSepoliaPool is Script {
         PoolKey memory key,
         bool wethToken0,
         uint256 target,
-        uint256 usdcBal
+        uint256 wethBal
     ) internal {
         PoolId id = key.toId();
-        bool zeroForOne = !wethToken0;
+        bool zeroForOne = wethToken0;
+        uint160 priceLimit = NetworkConfig.sqrtPriceFromOracle(int256(target), wethToken0);
 
-        for (uint256 i = 0; i < 12; i++) {
-            if (usdcBal < 1e4) break;
+        for (uint256 i = 0; i < 24; i++) {
+            if (wethBal < 1e12) break;
             (uint160 sqrtPriceX96,,,) = manager.getSlot0(id);
             uint256 poolPrice8 = _poolPrice8(sqrtPriceX96, wethToken0);
             if (poolPrice8 <= target) break;
             uint256 diffBps = ((poolPrice8 - target) * 10_000) / target;
             if (diffBps <= 50) break;
 
-            uint256 swapAmt = _swapUsdcAmount(diffBps, usdcBal);
-            console2.log("Swap USDC in:", swapAmt, "diffBps:", diffBps);
-            _swapUsdcIn(swapRouter, key, zeroForOne, swapAmt);
-            usdcBal -= swapAmt;
+            uint256 swapAmt = _swapWethAmount(diffBps, wethBal);
+            console2.log("Swap WETH in:", swapAmt, "diffBps:", diffBps);
+            _swapIn(swapRouter, key, zeroForOne, swapAmt, priceLimit);
+            wethBal -= swapAmt;
         }
     }
 
-    function _swapUsdcIn(PoolSwapTest swapRouter, PoolKey memory key, bool zeroForOne, uint256 swapAmt) internal {
+    function _swapIn(
+        PoolSwapTest swapRouter,
+        PoolKey memory key,
+        bool zeroForOne,
+        uint256 swapAmt,
+        uint160 targetSqrt
+    ) internal {
+        uint160 limit = zeroForOne
+            ? (targetSqrt > TickMath.MIN_SQRT_PRICE + 1 ? targetSqrt : TickMath.MIN_SQRT_PRICE + 1)
+            : (targetSqrt < TickMath.MAX_SQRT_PRICE - 1 ? targetSqrt : TickMath.MAX_SQRT_PRICE - 1);
         swapRouter.swap(
             key,
-            SwapParams({
-                zeroForOne: zeroForOne,
-                amountSpecified: -int256(swapAmt),
-                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            }),
+            SwapParams({zeroForOne: zeroForOne, amountSpecified: -int256(swapAmt), sqrtPriceLimitX96: limit}),
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
             ""
         );
@@ -179,14 +208,17 @@ contract AlignSepoliaPool is Script {
         IERC20Minimal(cfg.usdc).approve(spender, type(uint256).max);
     }
 
-    function _swapUsdcAmount(uint256 diffBps, uint256 maxUsdc) internal pure returns (uint256) {
+    function _swapWethAmount(uint256 diffBps, uint256 maxWei) internal pure returns (uint256) {
         uint256 want;
-        if (diffBps > 5000) want = 2500e6;
-        else if (diffBps > 2000) want = 1200e6;
-        else if (diffBps > 1000) want = 600e6;
-        else if (diffBps > 500) want = 250e6;
-        else want = 80e6;
-        return want > maxUsdc ? maxUsdc : want;
+        if (diffBps > 5000) want = 0.01 ether;
+        else if (diffBps > 2000) want = 0.005 ether;
+        else if (diffBps > 1000) want = 0.002 ether;
+        else if (diffBps > 500) want = 0.001 ether;
+        else want = 0.0003 ether;
+        if (want > maxWei) want = maxWei;
+        uint256 hopCap = maxWei <= 0.0001 ether ? maxWei / 8 : 0.0005 ether;
+        if (want > hopCap) want = hopCap;
+        return want;
     }
 
     function _poolPrice8(uint160 sqrtPriceX96, bool wethToken0) internal pure returns (uint256) {

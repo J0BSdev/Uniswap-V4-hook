@@ -17,7 +17,7 @@ const connectors = CAN_SWAP_ONCHAIN
   : [injected()];
 
 export const wagmiConfig = createConfig({
-  chains: [base, baseSepolia],
+  chains: ENV.chainId === 84532 ? [baseSepolia, base] : [base, baseSepolia],
   connectors,
   transports: {
     [base.id]: http(mainnetRpc),

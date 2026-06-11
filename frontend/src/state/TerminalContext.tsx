@@ -20,7 +20,7 @@ import {
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, CAN_SWAP_WITH_WALLET, ENV, IS_DEMO } from "../config/contracts";
+import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, CAN_SWAP_WITH_WALLET, ENV, IS_DEMO, IS_FORK_DEV } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
 import { quoteSwapLive, type LivePoolState } from "../lib/clQuote";
 import { reservesFromLiquidity } from "../lib/clReserves";
@@ -370,7 +370,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const value = useMemo<TerminalState>(
     () => ({
       isDemo: IS_DEMO,
-      isFork: CAN_SWAP_ONCHAIN,
+      isFork: IS_FORK_DEV,
       canNudgeMockOracle: CAN_NUDGE_MOCK_ORACLE,
       mode: isLive ? "live" : "demo",
       liveError: live.configured ? live.error : undefined,

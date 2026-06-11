@@ -1,5 +1,5 @@
 import { type Hex, type WalletClient } from "viem";
-import { BASE, ENV, WETH_IS_CURRENCY0 } from "../config/contracts";
+import { BASE, ENV } from "../config/contracts";
 import { poolManagerAbi } from "../abi/external";
 import { deviationBps } from "./feeMath";
 import { readMainnetChainlinkEthUsd } from "./chainlinkRef";
@@ -7,6 +7,8 @@ import { setForkOraclePrice, syncOracleToChainlink } from "./forkOracle";
 import { poolPriceFromSlot0, poolStateSlot } from "./poolState";
 import { createAppPublicClient, requireHex } from "./rpcClient";
 import { executeOnchainSwapWithWallet } from "./swapOnchain";
+
+const ON_SEPOLIA = ENV.chainId === 84532;
 
 async function readOnChainPoolPrice(): Promise<number> {
   const client = createAppPublicClient();
@@ -25,12 +27,18 @@ async function readOnChainPoolPrice(): Promise<number> {
 }
 
 function swapTokenToMovePrice(poolPrice: number, targetUsd: number): "WETH" | "USDC" {
-  const needLower = poolPrice > targetUsd;
-  if (WETH_IS_CURRENCY0) return needLower ? "WETH" : "USDC";
-  return needLower ? "USDC" : "WETH";
+  // Lower pool ETH/USD → swap WETH in (zeroForOne when WETH is token0, oneForZero when USDC is token0).
+  return poolPrice > targetUsd ? "WETH" : "USDC";
 }
 
-function swapAmountUsd(diffBps: number): number {
+function swapAmountUsd(diffBps: number, onSepolia: boolean): number {
+  if (onSepolia) {
+    if (diffBps > 5000) return 0.0005;
+    if (diffBps > 2000) return 0.0003;
+    if (diffBps > 1000) return 0.0002;
+    if (diffBps > 500) return 0.0001;
+    return 0.00005;
+  }
   if (diffBps > 5000) return 2500;
   if (diffBps > 2000) return 800;
   if (diffBps > 1000) return 300;
@@ -44,14 +52,14 @@ export async function alignPoolToTarget(targetUsd: number, wallet?: WalletClient
   const target = Math.max(100, targetUsd);
   await setForkOraclePrice(target, wallet);
 
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < (ON_SEPOLIA ? 32 : 16); i++) {
     const poolPrice = await readOnChainPoolPrice();
     const diffBps = deviationBps(poolPrice, target);
     if (diffBps <= 50) return poolPrice;
 
     const tokenIn = swapTokenToMovePrice(poolPrice, target);
-    const amountIn = swapAmountUsd(diffBps);
-    await executeOnchainSwapWithWallet(tokenIn, amountIn, wallet);
+    const amountIn = swapAmountUsd(diffBps, ON_SEPOLIA);
+    await executeOnchainSwapWithWallet(tokenIn, amountIn, wallet, undefined, target);
   }
 
   return readOnChainPoolPrice();

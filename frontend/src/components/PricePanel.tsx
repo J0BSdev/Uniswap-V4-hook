@@ -58,7 +58,7 @@ export function PricePanel() {
           </button>
         ) : isLive ? (
           <span className="chip chip-on">
-            <span className="dot" /> On-chain · auto-refresh
+            <span className="dot" /> Base Sepolia · testnet
           </span>
         ) : (
           <button className={`chip ${oracleLive ? "chip-on" : ""}`} onClick={toggleOracleLive}>
@@ -77,14 +77,14 @@ export function PricePanel() {
           <span className="price-label">Chainlink ETH/USD</span>
           <span className="price-value">{fmtUsd(chainlinkPrice ?? oraclePrice)}</span>
           <span className="price-sub">
-            {canNudgeMockOracle ? "live · Base mainnet feed" : "on-chain Chainlink feed"}
+            {canNudgeMockOracle ? "live · Base mainnet Chainlink" : "on-chain Chainlink feed"}
           </span>
         </div>
         {canNudgeMockOracle && hookOraclePrice !== undefined && (
           <div className="price-cell">
             <span className="price-label">Hook oracle</span>
             <span className="price-value">{fmtUsd(hookOraclePrice)}</span>
-            <span className="price-sub">mock feed used by previewFee</span>
+            <span className="price-sub">on-chain · Sepolia hook feed</span>
           </div>
         )}
         {clReserves && (
@@ -211,8 +211,8 @@ export function PricePanel() {
             </button>
           </div>
           <p className="hint">
-            Connect MetaMask on Base Sepolia. <strong>Align to Chainlink</strong> / <strong>Set pool</strong> sync the
-            mock oracle and swap the pool toward your target (needs WETH + USDC + gas).
+            Base Sepolia testnet — connect MetaMask, then use <strong>Align to Chainlink</strong> or{" "}
+            <strong>Set pool</strong>. Chainlink reference price is read from Base mainnet.
           </p>
         </>
       ) : isLive ? (

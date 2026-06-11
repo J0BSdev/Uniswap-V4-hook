@@ -15,6 +15,7 @@ import { base, baseSepolia } from "viem/chains";
 import { BASE, ENV, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { erc20Abi, poolManagerAbi, poolSwapTestAbi } from "../abi/external";
+import { sqrtPriceLimitForTarget } from "./sqrtPrice";
 
 const DYNAMIC_FEE_FLAG = 0x800000;
 const OVERRIDE_FEE_MASK = 0xbfffff;
@@ -95,7 +96,8 @@ async function swapWithAccount(
   amountIn: number,
   account: Address,
   walletClient: WalletClient,
-  previewFeePips?: number
+  previewFeePips?: number,
+  targetPoolUsd?: number
 ): Promise<OnchainSwapResult> {
   const rpc = ENV.baseRpcUrl || (ENV.chainId === 84532 ? "https://sepolia.base.org" : "https://mainnet.base.org");
   const chain = ENV.chainId === 84532 ? baseSepolia : base;
@@ -108,6 +110,12 @@ async function swapWithAccount(
   const decimals = tokenIn === "WETH" ? 18 : 6;
   const amountWei = parseUnits(amountIn.toString(), decimals);
   const tokenAddr = tokenIn === "WETH" ? BASE.weth : BASE.usdc;
+  const priceLimit =
+    targetPoolUsd !== undefined
+      ? sqrtPriceLimitForTarget(targetPoolUsd, zeroForOne)
+      : zeroForOne
+        ? MIN_SQRT_PRICE + 1n
+        : MAX_SQRT_PRICE - 1n;
 
   const allowance = await publicClient.readContract({
     address: tokenAddr,
@@ -138,7 +146,7 @@ async function swapWithAccount(
       {
         zeroForOne,
         amountSpecified: -amountWei,
-        sqrtPriceLimitX96: zeroForOne ? MIN_SQRT_PRICE + 1n : MAX_SQRT_PRICE - 1n,
+        sqrtPriceLimitX96: priceLimit,
       },
       { takeClaims: false, settleUsingBurn: false },
       "0x",
@@ -170,11 +178,12 @@ export async function executeOnchainSwapWithWallet(
   tokenIn: "WETH" | "USDC",
   amountIn: number,
   wallet?: WalletClient,
-  previewFeePips?: number
+  previewFeePips?: number,
+  targetPoolUsd?: number
 ): Promise<OnchainSwapResult> {
   if (wallet) {
     const [address] = await wallet.getAddresses();
-    return swapWithAccount(tokenIn, amountIn, address, wallet, previewFeePips);
+    return swapWithAccount(tokenIn, amountIn, address, wallet, previewFeePips, targetPoolUsd);
   }
   return executeOnchainSwap(tokenIn, amountIn, previewFeePips);
 }

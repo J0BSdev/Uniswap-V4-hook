@@ -14,7 +14,7 @@ export const BASE_MAINNET = {
   poolManager: "0x498581fF718922c3f8e6A244956aF099B2652b2b" as Address,
 };
 
-// Base Sepolia — oracle feed is the mock deployed by DeployBaseSepolia.s.sol.
+// Base Sepolia — on-chain oracle feed wired to the deployed hook.
 export const BASE_SEPOLIA = {
   weth: "0x4200000000000000000000000000000000000006" as Address,
   usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address,
@@ -79,5 +79,8 @@ export const CAN_SWAP_ONCHAIN = !IS_DEMO && !!ENV.swapRouter && !!ENV.devPrivate
 // Swaps via connected MetaMask + deployed PoolSwapTest router (Sepolia public).
 export const CAN_SWAP_WITH_WALLET = !IS_DEMO && !!ENV.swapRouter;
 
-/** Sepolia mock Chainlink feed — anyone can call setRound to refresh staleness. */
+/** Sepolia hook oracle feed — updatable via connected wallet. */
 export const CAN_NUDGE_MOCK_ORACLE = !IS_DEMO && IS_SEPOLIA && BASE.ethUsdFeed !== "0x0000000000000000000000000000000000000000";
+
+/** True when running against local anvil fork (dev key swaps, no MetaMask required). */
+export const IS_FORK_DEV = CAN_SWAP_ONCHAIN && !!ENV.baseRpcUrl && ENV.baseRpcUrl.includes("127.0.0.1");

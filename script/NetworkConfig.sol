@@ -35,7 +35,7 @@ library NetworkConfig {
             usdc: 0x036CbD53842c5426634e7929541eC2318f3dCF7e,
             ethUsdFeed: address(0),
             sequencerFeed: address(0),
-            defaultOraclePrice8: 3500e8
+            defaultOraclePrice8: 2000e8
         });
     }
 
