@@ -45,7 +45,7 @@ These tiers are designed to keep fees lower during normal market conditions and 
 
 ## Main Features
 
-* Uniswap v4 `beforeSwap` hook
+* Uniswap v4 `beforeSwap` hooks
 * Dynamic LP fee calculation
 * Chainlink ETH/USD oracle integration
 * Base sequencer uptime check

@@ -38,12 +38,14 @@ SEQ=$(cast call "$HOOK" "sequencerUptimeFeed()(address)" --rpc-url "$RPC")
 
 ARGS=$(cast abi-encode "constructor(address,address,address,address,address)" "$PM" "$WETH" "$USDC" "$FEED" "$SEQ")
 
+VERIFIER_URL="https://api.etherscan.io/v2/api?chainid=84532"
+
 echo "==> Verifying DynamicLPFeesHook at $HOOK ..."
 forge verify-contract \
   "$HOOK" \
   src/LPFees/DynamicLPFeesHook.sol:DynamicLPFeesHook \
-  --chain-id 84532 \
-  --rpc-url "$RPC" \
+  --verifier etherscan \
+  --verifier-url "$VERIFIER_URL" \
   --etherscan-api-key "$API" \
   --constructor-args "$ARGS" \
   --watch
@@ -52,8 +54,8 @@ echo "==> Verifying mock price feed at $FEED ..."
 forge verify-contract \
   "$FEED" \
   test/mocks/MockChainlinkAggregator.sol:MockChainlinkAggregator \
-  --chain-id 84532 \
-  --rpc-url "$RPC" \
+  --verifier etherscan \
+  --verifier-url "$VERIFIER_URL" \
   --etherscan-api-key "$API" \
   --watch || echo "(price feed verify skipped — may already be verified)"
 
