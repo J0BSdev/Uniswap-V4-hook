@@ -235,6 +235,27 @@ body {
 .banner-error strong {
   color: var(--down);
 }
+.banner-fork {
+  background: rgba(57, 217, 138, 0.08);
+  border-color: rgba(57, 217, 138, 0.28);
+  color: #b8f0d4;
+}
+.banner-fork strong {
+  color: var(--up);
+}
+.banner-warn {
+  background: rgba(245, 196, 81, 0.1);
+  border-color: rgba(245, 196, 81, 0.35);
+  color: #e8d4a0;
+}
+.banner-sepolia {
+  background: rgba(91, 141, 255, 0.08);
+  border-color: rgba(91, 141, 255, 0.28);
+  color: #b8cff9;
+}
+.banner-sepolia strong {
+  color: #8eb4ff;
+}
 
 .demo-banner {
   background: rgba(245, 196, 81, 0.07);

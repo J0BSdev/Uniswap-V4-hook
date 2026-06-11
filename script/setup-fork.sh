@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-shot Base mainnet fork setup: anvil + deploy hook + seed liquidity + write frontend/.env.local
+# One-shot Base mainnet fork setup: anvil + deploy hook + seed liquidity + write frontend/.env.fork.local
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
