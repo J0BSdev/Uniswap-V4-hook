@@ -31,20 +31,35 @@ function swapTokenToMovePrice(poolPrice: number, targetUsd: number): "WETH" | "U
   return poolPrice > targetUsd ? "WETH" : "USDC";
 }
 
-function swapAmountUsd(diffBps: number, onSepolia: boolean): number {
-  if (onSepolia) {
-    if (diffBps > 5000) return 0.0005;
-    if (diffBps > 2000) return 0.0003;
-    if (diffBps > 1000) return 0.0002;
-    if (diffBps > 500) return 0.0001;
-    return 0.00005;
+function swapAmountForAlign(tokenIn: "WETH" | "USDC", diffBps: number): number {
+  if (tokenIn === "WETH") {
+    if (ON_SEPOLIA) {
+      if (diffBps > 5000) return 0.0005;
+      if (diffBps > 2000) return 0.0003;
+      if (diffBps > 1000) return 0.0002;
+      if (diffBps > 500) return 0.0001;
+      return 0.00005;
+    }
+    if (diffBps > 5000) return 0.5;
+    if (diffBps > 2000) return 0.2;
+    if (diffBps > 1000) return 0.1;
+    if (diffBps > 500) return 0.05;
+    if (diffBps > 100) return 0.02;
+    return 0.01;
   }
-  if (diffBps > 5000) return 2500;
-  if (diffBps > 2000) return 800;
-  if (diffBps > 1000) return 300;
-  if (diffBps > 500) return 100;
-  if (diffBps > 100) return 30;
-  return 10;
+  if (ON_SEPOLIA) {
+    if (diffBps > 5000) return 5;
+    if (diffBps > 2000) return 4;
+    if (diffBps > 1000) return 3;
+    if (diffBps > 500) return 2;
+    return 1;
+  }
+  if (diffBps > 5000) return 500;
+  if (diffBps > 2000) return 200;
+  if (diffBps > 1000) return 80;
+  if (diffBps > 500) return 30;
+  if (diffBps > 100) return 10;
+  return 5;
 }
 
 /** Sync mock oracle + swap until pool spot is within ~0.5% of target USD. */
@@ -58,7 +73,7 @@ export async function alignPoolToTarget(targetUsd: number, wallet?: WalletClient
     if (diffBps <= 50) return poolPrice;
 
     const tokenIn = swapTokenToMovePrice(poolPrice, target);
-    const amountIn = swapAmountUsd(diffBps, ON_SEPOLIA);
+    const amountIn = swapAmountForAlign(tokenIn, diffBps);
     await executeOnchainSwapWithWallet(tokenIn, amountIn, wallet, undefined, target);
   }
 

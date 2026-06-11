@@ -86,7 +86,6 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [resetPoolBusy, setResetPoolBusy] = useState(false);
   const [syncOracleBusy, setSyncOracleBusy] = useState(false);
   const [alignPoolBusy, setAlignPoolBusy] = useState(false);
-  const poolAlignAttempted = useRef(false);
   const oracleSyncAttempted = useRef(false);
   const oracleRef = useRef(oraclePrice);
   oracleRef.current = oraclePrice;
@@ -194,21 +193,6 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     [oracleWallet, queryClient, pushEvent]
   );
 
-  useEffect(() => {
-    if (!CAN_SWAP_ONCHAIN || !isLive || poolAlignAttempted.current) return;
-    if (!live.chainlinkPrice || !live.poolPrice) return;
-    if (deviationBps(live.poolPrice, live.chainlinkPrice) <= 50) return;
-
-    poolAlignAttempted.current = true;
-    void (async () => {
-      try {
-        await alignPoolToChainlink();
-        await queryClient.invalidateQueries();
-      } catch {
-        /* anvil not running or swap failed */
-      }
-    })();
-  }, [isLive, live.chainlinkPrice, live.poolPrice, queryClient]);
 
   useEffect(() => {
     if (!CAN_NUDGE_MOCK_ORACLE || CAN_SWAP_ONCHAIN || !isLive || oracleSyncAttempted.current) return;

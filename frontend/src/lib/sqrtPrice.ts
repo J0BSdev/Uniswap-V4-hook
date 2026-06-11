@@ -25,6 +25,27 @@ function sqrtBigInt(x: bigint): bigint {
   return y;
 }
 
+/** Cap how far a user swap can move the pool (prevents hitting MIN/MAX sqrt). */
+export function sqrtPriceSlippageLimit(
+  currentSqrt: bigint,
+  zeroForOne: boolean,
+  slippageBps = 2000
+): bigint {
+  const MIN = 4295128739n;
+  const MAX = 1461446703485210103287273052203988822378723970342n;
+  if (currentSqrt <= 0n) return zeroForOne ? MIN + 1n : MAX - 1n;
+
+  const bps = BigInt(Math.min(5000, Math.max(100, slippageBps)));
+  if (zeroForOne) {
+    const target = (currentSqrt * currentSqrt * (10000n - bps)) / 10000n;
+    const limit = sqrtBigInt(target);
+    return limit > MIN + 1n ? limit : MIN + 1n;
+  }
+  const target = (currentSqrt * currentSqrt * (10000n + bps)) / 10000n;
+  const limit = sqrtBigInt(target);
+  return limit < MAX - 1n ? limit : MAX - 1n;
+}
+
 /** Uniswap V4 swap limit: stop when pool spot reaches targetUsd. */
 export function sqrtPriceLimitForTarget(targetUsd: number, zeroForOne: boolean): bigint {
   const targetSqrt = sqrtPriceFromTargetUsd(targetUsd);

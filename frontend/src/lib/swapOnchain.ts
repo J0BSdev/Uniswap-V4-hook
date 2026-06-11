@@ -15,13 +15,13 @@ import { base, baseSepolia } from "viem/chains";
 import { BASE, ENV, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { erc20Abi, poolManagerAbi, poolSwapTestAbi } from "../abi/external";
-import { sqrtPriceLimitForTarget } from "./sqrtPrice";
+import { sqrtPriceLimitForTarget, sqrtPriceSlippageLimit } from "./sqrtPrice";
+import { parseSlot0, poolStateSlot } from "./poolState";
+import { requireHex } from "./rpcClient";
 
 const DYNAMIC_FEE_FLAG = 0x800000;
 const OVERRIDE_FEE_MASK = 0xbfffff;
 const TICK_SPACING = 60;
-const MIN_SQRT_PRICE = 4295128739n;
-const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970342n;
 
 export interface OnchainSwapResult {
   hash: Hex;
@@ -110,12 +110,20 @@ async function swapWithAccount(
   const decimals = tokenIn === "WETH" ? 18 : 6;
   const amountWei = parseUnits(amountIn.toString(), decimals);
   const tokenAddr = tokenIn === "WETH" ? BASE.weth : BASE.usdc;
+
+  const poolId = requireHex(ENV.poolId, "VITE_POOL_ID");
+  const slotWord = await publicClient.readContract({
+    address: BASE.poolManager,
+    abi: poolManagerAbi,
+    functionName: "extsload",
+    args: [poolStateSlot(poolId)],
+  });
+  const { sqrtPriceX96 } = parseSlot0(slotWord as Hex);
+
   const priceLimit =
     targetPoolUsd !== undefined
       ? sqrtPriceLimitForTarget(targetPoolUsd, zeroForOne)
-      : zeroForOne
-        ? MIN_SQRT_PRICE + 1n
-        : MAX_SQRT_PRICE - 1n;
+      : sqrtPriceSlippageLimit(sqrtPriceX96, zeroForOne);
 
   const allowance = await publicClient.readContract({
     address: tokenAddr,
