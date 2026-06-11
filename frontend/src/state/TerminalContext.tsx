@@ -284,8 +284,17 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
   const buildLiveQuoteState = useCallback((): LivePoolState | null => {
-    const canQuote = (isLive || forkLive) && live.sqrtPriceX96 !== undefined && live.liquidity !== undefined && live.liquidity > 0n && live.poolPrice !== undefined && live.poolPrice > 0 && tickBounds;
-    if (!canQuote) return null;
+    if (
+      !(isLive || forkLive) ||
+      live.sqrtPriceX96 === undefined ||
+      live.liquidity === undefined ||
+      live.liquidity <= 0n ||
+      live.poolPrice === undefined ||
+      live.poolPrice <= 0 ||
+      !tickBounds
+    ) {
+      return null;
+    }
     return {
       sqrtPriceX96: live.sqrtPriceX96,
       liquidity: live.liquidity,

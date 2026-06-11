@@ -1,6 +1,6 @@
 import { poolPriceFromSqrt, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { sqrtPriceSlippageLimit } from "./sqrtPrice";
-import { deviationBps, feeForDeviationBps, feePipsToPercent } from "./feeMath";
+import { deviationBps, feeForDeviationBps, feePipsToPercent, riskScoreBps } from "./feeMath";
 import { getSqrtRatioAtTick } from "./tickMath";
 import type { SwapDir, SwapQuote } from "./demoPool";
 
@@ -143,39 +143,6 @@ function fromWei(amount: bigint, decimals: number): number {
   return Number(amount) / 10 ** decimals;
 }
 
-function absAmountWei(amount: bigint): bigint {
-  if (amount >= 0n) return amount;
-  const min = -(1n << 255n);
-  if (amount === min) return 1n << 255n;
-  return -amount;
-}
-
-/** Match hook _tradeWethEquivalent18 + _sizeRatioBps (WETH-normalized, not raw wei). */
-function sizeRatioBps(
-  liquidity: bigint,
-  amountInWei: bigint,
-  zeroForOne: boolean,
-  poolPrice: number
-): number {
-  if (liquidity === 0n) return Number.MAX_SAFE_INTEGER;
-  const tradeSize = absAmountWei(amountInWei);
-  const isWethIn = WETH_IS_CURRENCY0 ? zeroForOne : !zeroForOne;
-  const poolPrice8 = BigInt(Math.max(1, Math.round(poolPrice * 1e8)));
-  const wethEquivalent18 = isWethIn ? tradeSize : (tradeSize * 10n ** 20n) / poolPrice8;
-  const maxMul = (1n << 256n) - 1n;
-  if (wethEquivalent18 > maxMul / 10_000n) return Number.MAX_SAFE_INTEGER;
-  return Number((wethEquivalent18 * 10_000n) / liquidity);
-}
-
-function riskScoreBps(
-  deviationBpsBefore: number,
-  liquidity: bigint,
-  amountInWei: bigint,
-  zeroForOne: boolean,
-  poolPrice: number
-): number {
-  return Math.max(deviationBpsBefore, sizeRatioBps(liquidity, amountInWei, zeroForOne, poolPrice));
-}
 
 /**
  * Quotes a swap against live concentrated liquidity.
@@ -197,7 +164,8 @@ export function quoteSwapLive(state: LivePoolState, amountIn: number, dir: SwapD
     state.liquidity,
     amountInWei,
     zeroForOne,
-    state.poolPrice
+    state.poolPrice,
+    WETH_IS_CURRENCY0
   );
   const feePips = feeForDeviationBps(scoreBps);
   const feePercent = feePipsToPercent(feePips);

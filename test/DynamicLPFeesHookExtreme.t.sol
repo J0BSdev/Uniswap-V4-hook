@@ -79,7 +79,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         _assertFeeInvariants(fee, score);
-        _assertScoreIsMaxComponents(score, amount);
+        _assertScoreIsMaxComponents(score, true, amount);
     }
 
     // ============================================================
@@ -358,20 +358,22 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         assertEq(fee, _feeForScore(score));
     }
 
-    function _assertScoreIsMaxComponents(uint256 score, int256 amount) internal view {
+    function _assertScoreIsMaxComponents(uint256 score, bool zeroForOne, int256 amount) internal view {
         (, uint256 priceScore) = hook.previewFee(poolId);
-        uint256 sizeScore = amount == 0 ? 0 : _sizeScore(amount);
+        uint256 sizeScore = amount == 0 ? 0 : _sizeScore(zeroForOne, amount);
         uint256 expected = priceScore > sizeScore ? priceScore : sizeScore;
         assertEq(score, expected);
     }
 
-    function _sizeScore(int256 amount) internal view returns (uint256) {
+    function _sizeScore(bool zeroForOne, int256 amount) internal view returns (uint256) {
         if (amount == 0) return 0;
         uint128 liq = manager.getLiquidity(poolId);
         if (liq == 0) return type(uint256).max;
         uint256 tradeSize = amount >= 0 ? uint256(amount) : _abs(amount);
-        if (tradeSize > type(uint256).max / 10_000) return type(uint256).max;
-        return tradeSize * 10_000 / uint256(liq);
+        (uint160 sqrtP,,,) = manager.getSlot0(poolId);
+        uint256 wethEq = zeroForOne ? tradeSize : FullMath.mulDiv(tradeSize, 1e20, _refPoolPrice8(sqrtP));
+        if (wethEq > type(uint256).max / 10_000) return type(uint256).max;
+        return wethEq * 10_000 / uint256(liq);
     }
 
     function _abs(int256 x) internal pure returns (uint256) {
