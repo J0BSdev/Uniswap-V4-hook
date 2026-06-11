@@ -1,6 +1,6 @@
 import { poolPriceFromSqrt, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { sqrtPriceSlippageLimit } from "./sqrtPrice";
-import { deviationBps, feeForDeviationBps, feePipsToPercent, riskScoreBps } from "./feeMath";
+import { deviationBps, feeForDeviationBps, feePipsToPercent } from "./feeMath";
 import { getSqrtRatioAtTick } from "./tickMath";
 import type { SwapDir, SwapQuote } from "./demoPool";
 
@@ -146,7 +146,7 @@ function fromWei(amount: bigint, decimals: number): number {
 
 /**
  * Quotes a swap against live concentrated liquidity.
- * Fee mirrors on-chain getFee: max(oracle deviation, tradeSize/liquidity).
+ * Fee mirrors on-chain getFee: oracle deviation only (trade size ignored).
  */
 export function quoteSwapLive(state: LivePoolState, amountIn: number, dir: SwapDir): SwapQuote {
   const safeAmount = Number.isFinite(amountIn) && amountIn > 0 ? amountIn : 0;
@@ -159,14 +159,7 @@ export function quoteSwapLive(state: LivePoolState, amountIn: number, dir: SwapD
 
   const priceBefore = state.poolPrice;
   const amountInWei = safeAmount > 0 ? toWei(safeAmount, inDecimals) : 0n;
-  const scoreBps = riskScoreBps(
-    state.deviationBpsBefore,
-    state.liquidity,
-    amountInWei,
-    zeroForOne,
-    state.poolPrice,
-    WETH_IS_CURRENCY0
-  );
+  const scoreBps = state.deviationBpsBefore;
   const feePips = feeForDeviationBps(scoreBps);
   const feePercent = feePipsToPercent(feePips);
   const feeFraction = feePips / 1_000_000;

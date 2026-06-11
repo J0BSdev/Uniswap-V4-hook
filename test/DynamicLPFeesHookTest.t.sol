@@ -367,33 +367,34 @@ contract DynamicLPFeesHookTest is Test, Deployers {
         _swap(false, amount);
     }
 
-    function test_previewFee_usdEquivalentWethAndUsdc_similarSizeScore() public {
+    function test_previewFee_usdEquivalentWethAndUsdc_sameDeviationScore() public {
         _initPoolAtOraclePrice();
         _addLiquidity();
 
-        // ~$35 notional at $3500 ETH: 0.01 WETH vs 35 USDC
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
+
         int256 wethAmt = -0.01 ether;
         int256 usdcAmt = -35e6;
 
         (, uint256 wethScore) = hook.previewFee(poolId, true, wethAmt);
         (, uint256 usdcScore) = hook.previewFee(poolId, false, usdcAmt);
 
-        assertApproxEqAbs(wethScore, usdcScore, 2);
+        assertEq(wethScore, gaugeBps);
+        assertEq(usdcScore, gaugeBps);
+        assertEq(gaugeBps, 0);
+        assertEq(gaugeFee, hook.LOW_FEE());
     }
 
-    function test_previewFee_swapAware_sizeRatioRaisesFee() public {
+    function test_previewFee_swapAware_matchesGaugeRegardlessOfSize() public {
         _initPoolAtOraclePrice();
         _addLiquidity();
 
-        uint128 liquidity = manager.getLiquidity(poolId);
-        int256 largeSwap = -int256(uint256(liquidity) / 50);
-
-        (uint24 gaugeFee,) = hook.previewFee(poolId);
-        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, largeSwap);
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
+        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, -0.05 ether);
 
         assertEq(gaugeFee, hook.LOW_FEE());
-        assertGe(swapBps, hook.SCORE_LOW());
-        assertEq(swapFee, hook.MEDIUM_FEE());
+        assertEq(swapFee, gaugeFee);
+        assertEq(swapBps, gaugeBps);
     }
 
     function test_swap_previewFeeMatchesEmittedFee() public {

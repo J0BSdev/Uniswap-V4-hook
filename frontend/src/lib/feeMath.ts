@@ -50,7 +50,24 @@ export function feeForDeviationBps(bps: number): number {
   return fee;
 }
 
-/** Absolute deviation between pool price and oracle price, in bps. */
+/** Match hook _getPoolPriceFromSqrtPriceX96 — returns Chainlink 1e8 scale. */
+export function poolPrice8FromSqrt(sqrtPriceX96: bigint, wethIsCurrency0 = true): bigint {
+  if (sqrtPriceX96 <= 0n) return 0n;
+  const q96 = 1n << 96n;
+  const intermediate = (sqrtPriceX96 * sqrtPriceX96) / q96;
+  return wethIsCurrency0
+    ? (intermediate * 10n ** 20n) / q96
+    : (10n ** 20n * q96) / intermediate;
+}
+
+/** Match hook deviation formula using 1e8 USD prices. */
+export function deviationBpsFromPrice8(poolPrice8: bigint, oraclePrice8: bigint): number {
+  if (oraclePrice8 <= 0n) return 0;
+  const diff = poolPrice8 > oraclePrice8 ? poolPrice8 - oraclePrice8 : oraclePrice8 - poolPrice8;
+  return Number((diff * 10_000n) / oraclePrice8);
+}
+
+/** Absolute deviation between pool price and oracle price, in bps (human USD units). */
 export function deviationBps(poolPrice: number, oraclePrice: number): number {
   if (oraclePrice <= 0) return 0;
   const diff = Math.abs(poolPrice - oraclePrice);
@@ -66,52 +83,4 @@ export function feePipsToPercent(pips: number): number {
 export function deviationProgress(bps: number): number {
   const max = SCORE.HIGH * 1.5; // 3000 bps caps the gauge visually
   return Math.min(1, bps / max);
-}
-
-/** Match hook _isWethInput — WETH is token0 on Base mainnet fork. */
-export function isWethInput(zeroForOne: boolean, wethIsCurrency0 = true): boolean {
-  return wethIsCurrency0 ? zeroForOne : !zeroForOne;
-}
-
-/** Match hook _tradeWethEquivalent18 (pool spot, 1e8 USD scale). */
-export function wethEquivalent18(
-  amountInWei: bigint,
-  zeroForOne: boolean,
-  poolPrice: number,
-  wethIsCurrency0 = true
-): bigint {
-  const tradeSize = amountInWei < 0n ? -amountInWei : amountInWei;
-  if (isWethInput(zeroForOne, wethIsCurrency0)) return tradeSize;
-  const poolPrice8 = BigInt(Math.max(1, Math.round(poolPrice * 1e8)));
-  return (tradeSize * 10n ** 20n) / poolPrice8;
-}
-
-/** Match hook _sizeRatioBps — WETH-normalized, not raw wei. */
-export function sizeRatioBps(
-  liquidity: bigint,
-  amountInWei: bigint,
-  zeroForOne: boolean,
-  poolPrice: number,
-  wethIsCurrency0 = true
-): number {
-  if (liquidity === 0n) return Number.MAX_SAFE_INTEGER;
-  const wethEquivalent = wethEquivalent18(amountInWei, zeroForOne, poolPrice, wethIsCurrency0);
-  const maxMul = (1n << 256n) - 1n;
-  if (wethEquivalent > maxMul / 10_000n) return Number.MAX_SAFE_INTEGER;
-  return Number((wethEquivalent * 10_000n) / liquidity);
-}
-
-/** Match hook getFee swap path: max(deviation, normalized size/liquidity). */
-export function riskScoreBps(
-  deviationBpsBefore: number,
-  liquidity: bigint,
-  amountInWei: bigint,
-  zeroForOne: boolean,
-  poolPrice: number,
-  wethIsCurrency0 = true
-): number {
-  return Math.max(
-    deviationBpsBefore,
-    sizeRatioBps(liquidity, amountInWei, zeroForOne, poolPrice, wethIsCurrency0)
-  );
 }

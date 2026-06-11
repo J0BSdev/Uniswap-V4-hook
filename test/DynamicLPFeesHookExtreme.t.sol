@@ -79,23 +79,21 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         _assertFeeInvariants(fee, score);
-        _assertScoreIsMaxComponents(score, true, amount);
+        _assertScoreIsDeviationOnly(score, true, amount);
     }
 
     // ============================================================
-    // TIER BOUNDARY FUZZ — combined price + size scores
+    // TIER BOUNDARY FUZZ — oracle deviation scores
     // ============================================================
 
-    function testFuzz_tierBoundaries(uint256 priceScore, uint256 sizeScore) public {
+    function testFuzz_tierBoundaries(uint256 priceScore) public {
         priceScore = bound(priceScore, 0, 100_000);
-        sizeScore = bound(sizeScore, 0, 100_000);
-        uint256 combined = priceScore > sizeScore ? priceScore : sizeScore;
 
-        uint24 expected = _feeForScore(combined);
-        (uint24 fee, uint256 score) = _feeFromScorePure(combined);
+        uint24 expected = _feeForScore(priceScore);
+        (uint24 fee, uint256 score) = _feeFromScorePure(priceScore);
 
         assertEq(fee, expected);
-        assertEq(score, combined);
+        assertEq(score, priceScore);
     }
 
     function test_tierBoundaries_exactEdges() public {
@@ -145,10 +143,10 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initParity();
         _seedMinimal();
 
-        // Tiny trade so fee is oracle-driven before the spike (size score negligible).
+        // Tiny trade — fee is oracle-driven only.
         int256 amt = -1;
         (uint24 feeBefore,) = hook.previewFee(poolId, true, amt);
-        assertLt(feeBefore, hook.VERY_HIGH_FEE());
+        assertEq(feeBefore, hook.LOW_FEE());
 
         // Attacker pumps oracle +50% mid-session (simulates off-chain move).
         priceFeed.setRound(int256(ORACLE * 150 / 100), block.timestamp - 1, block.timestamp);
@@ -187,20 +185,20 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initParity();
         uint128 seededLiq = _seedMinimal();
 
-        // Moderate whale — moves price but keeps LP removal settleable.
+        // Moderate whale — moves pool price away from oracle.
         int256 whale = -0.05 ether;
         (uint24 feeWhale,) = hook.previewFee(poolId, true, whale);
-        assertGe(feeWhale, hook.MEDIUM_FEE());
+        assertEq(feeWhale, hook.LOW_FEE());
 
         _trySwap(true, whale);
 
         // Attacker (or LP) removes seeded position after moving price.
         _removeSeedLiquidity(seededLiq);
         (uint24 feeAfterDrain,) = hook.previewFee(poolId, true, -0.001 ether);
-        assertEq(feeAfterDrain, hook.VERY_HIGH_FEE());
+        assertEq(feeAfterDrain, hook.LOW_FEE(), "fee follows oracle deviation, not L");
     }
 
-    function test_attack_splitSwapLowersPerTxFee() public {
+    function test_attack_splitSwapSameFeePerTx() public {
         _initParity();
         _seedMinimal();
 
@@ -210,8 +208,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         (uint24 feeSingle,) = hook.previewFee(poolId, true, single);
         (uint24 feeSplit,) = hook.previewFee(poolId, true, split);
 
-        // Documented economic property: splitting reduces per-tx size score.
-        assertGe(feeSingle, feeSplit, "split swaps can pay lower fee per tx");
+        assertEq(feeSingle, feeSplit, "fee ignores trade size");
     }
 
     function testFuzz_absAmountSignSymmetric(int256 amount) public {
@@ -277,17 +274,17 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         assertEq(bps, diff * 10_000 / ORACLE);
     }
 
-    function testFuzz_sizeRatioReference(uint256 tradeSize) public {
+    function testFuzz_swapPreviewIgnoresTradeSize(uint256 tradeSize) public {
         tradeSize = bound(tradeSize, 1, type(uint256).max / 10_000);
         _initParity();
         _seedMinimal();
 
-        uint128 liq = manager.getLiquidity(poolId);
         int256 amount = -int256(tradeSize);
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
+        (uint24 swapFee, uint256 score) = hook.previewFee(poolId, true, amount);
 
-        (, uint256 score) = hook.previewFee(poolId, true, amount);
-        uint256 expectedSize = tradeSize * 10_000 / uint256(liq);
-        assertGe(score, expectedSize);
+        assertEq(score, gaugeBps);
+        assertEq(swapFee, gaugeFee);
     }
 
     // ============================================================
@@ -358,22 +355,9 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         assertEq(fee, _feeForScore(score));
     }
 
-    function _assertScoreIsMaxComponents(uint256 score, bool zeroForOne, int256 amount) internal view {
+    function _assertScoreIsDeviationOnly(uint256 score, bool, int256) internal view {
         (, uint256 priceScore) = hook.previewFee(poolId);
-        uint256 sizeScore = amount == 0 ? 0 : _sizeScore(zeroForOne, amount);
-        uint256 expected = priceScore > sizeScore ? priceScore : sizeScore;
-        assertEq(score, expected);
-    }
-
-    function _sizeScore(bool zeroForOne, int256 amount) internal view returns (uint256) {
-        if (amount == 0) return 0;
-        uint128 liq = manager.getLiquidity(poolId);
-        if (liq == 0) return type(uint256).max;
-        uint256 tradeSize = amount >= 0 ? uint256(amount) : _abs(amount);
-        (uint160 sqrtP,,,) = manager.getSlot0(poolId);
-        uint256 wethEq = zeroForOne ? tradeSize : FullMath.mulDiv(tradeSize, 1e20, _refPoolPrice8(sqrtP));
-        if (wethEq > type(uint256).max / 10_000) return type(uint256).max;
-        return wethEq * 10_000 / uint256(liq);
+        assertEq(score, priceScore);
     }
 
     function _abs(int256 x) internal pure returns (uint256) {

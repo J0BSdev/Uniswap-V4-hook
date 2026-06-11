@@ -59,16 +59,19 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     // 1. Minimal liquidity (fork seed: 1 WETH + 3500 USDC)
     // ============================================================
 
-    function test_minimalLiquidity_whaleSwap_getsVeryHighFee() public {
+    function test_minimalLiquidity_whaleSwap_feeFromDeviationOnly() public {
         _initAndSeedMinimal();
         uint128 liq = manager.getLiquidity(poolId);
         assertGt(liq, 0);
 
-        // Swap almost entire WETH side of the book.
         int256 amount = -int256(uint256(liq));
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
-        assertGe(score, hook.SCORE_HIGH());
-        assertEq(fee, hook.VERY_HIGH_FEE());
+
+        assertEq(gaugeBps, 0);
+        assertEq(score, gaugeBps);
+        assertEq(fee, gaugeFee);
+        assertEq(fee, hook.LOW_FEE());
 
         vm.recordLogs();
         _swap(true, amount);
@@ -90,7 +93,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     }
 
     // ============================================================
-    // 2. Size-ratio math — must never panic, fee always bounded
+    // 2. Preview safety — must never panic, fee always bounded
     // ============================================================
 
     function test_previewFee_int256Min_doesNotBrickView() public {
@@ -100,19 +103,18 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         assertGe(fee, hook.MIN_FEE());
         assertLe(fee, hook.MAX_FEE());
         assertLe(fee, LPFeeLibrary.MAX_LP_FEE);
-        assertGt(score, 0);
+        assertGe(score, 0);
     }
 
     function test_previewFee_int256Max_doesNotBrickView() public {
         _initAndSeedMinimal();
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, type(int256).max);
-        assertGe(fee, hook.MIN_FEE());
-        assertLe(fee, hook.MAX_FEE());
-        assertEq(fee, hook.VERY_HIGH_FEE());
-        assertGt(score, hook.SCORE_HIGH());
+        assertEq(fee, gaugeFee);
+        assertEq(score, gaugeBps);
     }
 
-    function test_previewFee_zeroAmount_ignoresSizeRatio() public {
+    function test_previewFee_zeroAmount_matchesGauge() public {
         _initAndSeedMinimal();
         (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
         (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, 0);
@@ -130,20 +132,12 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         _assertFeeMatchesScore(fee, score);
     }
 
-    function testFuzz_sizeRatio_formula(uint256 tradeSize) public {
-        tradeSize = bound(tradeSize, 1, type(uint256).max / 10_000);
+    function testFuzz_previewFee_amountIgnored(int256 amount) public {
         _initAndSeedMinimal();
-
-        uint128 liquidity = manager.getLiquidity(poolId);
-        int256 amount = -int256(tradeSize);
-
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
-        uint256 wethEquivalent18 = tradeSize;
-        uint256 expectedSize = wethEquivalent18 * 10_000 / uint256(liquidity);
-        uint256 priceScore = _expectedPriceScore();
-        uint256 expectedScore = priceScore > expectedSize ? priceScore : expectedSize;
-
-        assertEq(score, expectedScore);
+        assertEq(fee, gaugeFee);
+        assertEq(score, gaugeBps);
         _assertFeeMatchesScore(fee, score);
     }
 
@@ -151,7 +145,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     // 3. Combined attack: oracle parity + huge trade on thin book
     // ============================================================
 
-    function testFuzz_thinBookHugeTrade_feeFromSizeNotOracle(uint256 tradeSize) public {
+    function testFuzz_thinBookHugeTrade_feeFromDeviationOnly(uint256 tradeSize) public {
         tradeSize = bound(tradeSize, 1, 100 ether);
         _initAndSeedMinimal();
 
@@ -162,13 +156,8 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         int256 amount = -int256(tradeSize);
         (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, amount);
 
-        uint128 liq = manager.getLiquidity(poolId);
-        uint256 sizeBps = tradeSize * 10_000 / uint256(liq);
-
-        assertEq(swapBps, sizeBps > gaugeBps ? sizeBps : gaugeBps);
-        if (sizeBps >= hook.SCORE_LOW()) {
-            assertGe(swapFee, hook.MEDIUM_FEE(), "large vs liquidity should hit elevated tier");
-        }
+        assertEq(swapBps, gaugeBps);
+        assertEq(swapFee, gaugeFee);
         _assertFeeMatchesScore(swapFee, swapBps);
     }
 
@@ -202,7 +191,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     // 5. Liquidity removal attack — fee path still safe
     // ============================================================
 
-    function test_afterFullLiquidityRemoval_previewUsesMaxSizeScore() public {
+    function test_afterFullLiquidityRemoval_previewStillWorks() public {
         _initAndSeedMinimal();
         (uint160 sqrtP, int24 tick,,) = manager.getSlot0(poolId);
         int24 spacing = key.tickSpacing;
@@ -217,9 +206,11 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         );
         assertEq(manager.getLiquidity(poolId), 0);
 
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
         (uint24 fee, uint256 score) = hook.previewFee(poolId, true, -1 ether);
-        assertEq(fee, hook.VERY_HIGH_FEE());
-        assertEq(score, type(uint256).max);
+        assertEq(fee, gaugeFee);
+        assertEq(score, gaugeBps);
+        assertEq(fee, hook.LOW_FEE());
         sqrtP; // silence warning
     }
 

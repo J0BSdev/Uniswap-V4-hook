@@ -57,7 +57,7 @@ contract DynamicLPFeesHook is BaseHook {
     error StaleOraclePrice();
     error PoolPriceNotSet();
 
-    // riskScoreBps = max(oracle deviation, tradeSize/liquidity) used for the tier
+    // riskScoreBps = oracle deviation (bps) used for the tier
     event FeeAdjusted(PoolId indexed poolId, uint24 feePips, uint256 riskScoreBps);
 
     constructor(IPoolManager _manager, address _weth, address _usdc, address _priceFeed, address _sequencerFeed)
@@ -75,13 +75,13 @@ contract DynamicLPFeesHook is BaseHook {
         return getFee(poolId);
     }
 
-    // Swap-aware preview — same logic as _beforeSwap (USD-normalized size / liquidity).
-    function previewFee(PoolId poolId, bool zeroForOne, int256 amountSpecified)
+    // Swap-aware preview — same logic as _beforeSwap (oracle deviation only; amount ignored).
+    function previewFee(PoolId poolId, bool, int256)
         external
         view
         returns (uint24 feePips, uint256 riskScoreBps)
     {
-        return getFee(poolId, zeroForOne, amountSpecified);
+        return getFee(poolId);
     }
 
     // Which hook callbacks are enabled — deploy address must match via HookMiner
@@ -122,7 +122,7 @@ contract DynamicLPFeesHook is BaseHook {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         PoolId poolId = key.toId();
-        (uint24 fee, uint256 riskScoreBps) = getFee(poolId, params.zeroForOne, params.amountSpecified);
+        (uint24 fee, uint256 riskScoreBps) = getFee(poolId);
         emit FeeAdjusted(poolId, fee, riskScoreBps);
         return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, fee | LPFeeLibrary.OVERRIDE_FEE_FLAG);
     }
@@ -130,18 +130,6 @@ contract DynamicLPFeesHook is BaseHook {
     // Oracle deviation only.
     function getFee(PoolId poolId) internal view returns (uint24 feePips, uint256 riskScoreBps) {
         return _feeFromScore(_priceDeviationBps(poolId));
-    }
-
-    // Oracle deviation + USD-normalized trade size / liquidity execution risk.
-    function getFee(PoolId poolId, bool zeroForOne, int256 amountSpecified)
-        internal
-        view
-        returns (uint24 feePips, uint256 riskScoreBps)
-    {
-        uint256 priceScore = _priceDeviationBps(poolId);
-        uint256 sizeScore = _sizeRatioBps(poolId, zeroForOne, amountSpecified);
-        riskScoreBps = priceScore > sizeScore ? priceScore : sizeScore;
-        return _feeFromScore(riskScoreBps);
     }
 
     function _priceDeviationBps(PoolId poolId) internal view returns (uint256 priceDeviationBps) {
@@ -156,49 +144,6 @@ contract DynamicLPFeesHook is BaseHook {
 
         uint256 diff = poolPrice > oraclePrice ? poolPrice - oraclePrice : oraclePrice - poolPrice;
         priceDeviationBps = diff * 10000 / oraclePrice;
-    }
-
-    function _sizeRatioBps(PoolId poolId, bool zeroForOne, int256 amountSpecified)
-        internal
-        view
-        returns (uint256 sizeRatioBps)
-    {
-        if (amountSpecified == 0) return 0;
-
-        uint128 liquidity = poolManager.getLiquidity(poolId);
-        if (liquidity == 0) return type(uint256).max;
-
-        uint256 tradeSize = _absAmount(amountSpecified);
-        uint256 wethEquivalent18 = _tradeWethEquivalent18(poolId, zeroForOne, tradeSize);
-        // Saturate on overflow — extreme inputs map to max execution-risk score.
-        if (wethEquivalent18 > type(uint256).max / 10_000) return type(uint256).max;
-        sizeRatioBps = wethEquivalent18 * 10_000 / uint256(liquidity);
-    }
-
-    /// @dev Express input amount as WETH wei (18 dec) at pool spot so WETH/USDC trades are comparable.
-    function _tradeWethEquivalent18(PoolId poolId, bool zeroForOne, uint256 tradeSize)
-        internal
-        view
-        returns (uint256 wethEquivalent18)
-    {
-        if (_isWethInput(zeroForOne)) return tradeSize;
-
-        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(poolId);
-        if (sqrtPriceX96 == 0) revert PoolPriceNotSet();
-        uint256 poolPrice8 = _getPoolPriceFromSqrtPriceX96(sqrtPriceX96);
-        // USDC (6 dec) → WETH wei: usdcRaw * 1e20 / poolPrice8
-        return FullMath.mulDiv(tradeSize, 1e20, poolPrice8);
-    }
-
-    function _isWethInput(bool zeroForOne) internal view returns (bool) {
-        return wethIsCurrency0 ? zeroForOne : !zeroForOne;
-    }
-
-    function _absAmount(int256 amount) internal pure returns (uint256) {
-        if (amount >= 0) return uint256(amount);
-        // type(int256).min has no positive int256 counterpart; uint256 abs is 2^255.
-        if (amount == type(int256).min) return uint256(type(int256).max) + 1;
-        return uint256(-amount);
     }
 
     function _feeFromScore(uint256 totalScore) internal pure returns (uint24 feePips, uint256 riskScoreBps) {

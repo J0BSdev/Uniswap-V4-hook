@@ -21,7 +21,7 @@ import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.so
 import {DynamicLPFeesHook} from "../src/LPFees/DynamicLPFeesHook.sol";
 import {MockChainlinkAggregator} from "./mocks/MockChainlinkAggregator.sol";
 
-/// @notice Economics + math regression: USD-normalized size scores, WETH/USDC parity, tier logic.
+/// @notice Economics regression: fee depends on oracle deviation only, not trade size.
 contract DynamicLPFeesHookEconomics is Test, Deployers {
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
@@ -49,131 +49,57 @@ contract DynamicLPFeesHookEconomics is Test, Deployers {
         _deployHook(WETH_MAIN, USDC_MAIN);
     }
 
-    // --- regression: old raw-wei formula unfairly penalized USDC ---
-
-    function test_regression_usdcNotUnderweightedVsWeth() public {
+    function test_feeIndependentOfTradeSize() public {
         _initAtOracle();
         _seed();
 
-        int256 weth035 = -0.01 ether;
-        int256 usdc35 = -35e6;
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
+        (uint24 feeSmall,) = hook.previewFee(poolId, false, -111e6);
+        (uint24 feeLarge,) = hook.previewFee(poolId, true, -10 ether);
 
-        (, uint256 wethScore) = hook.previewFee(poolId, true, weth035);
-        (, uint256 usdcScore) = hook.previewFee(poolId, false, usdc35);
-
-        assertApproxEqAbs(wethScore, usdcScore, 2, "USD-equivalent trades must score equally");
-
-        // Raw-wei bug: USDC side was ~285714x underweighted vs WETH for same USD.
-        uint128 liq = manager.getLiquidity(poolId);
-        uint256 buggyUsdc = 35e6 * 10_000 / uint256(liq);
-        assertGt(usdcScore, buggyUsdc * 100, "USDC must not use raw 6-dec wei in score");
+        assertEq(feeSmall, gaugeFee, "111 USDC must not change fee");
+        assertEq(feeLarge, gaugeFee, "10 WETH must not change fee");
+        assertEq(gaugeBps, 0);
+        assertEq(gaugeFee, hook.LOW_FEE());
     }
 
-    function test_usdNotional_orderingHigherTradeHigherScore() public {
+    function testFuzz_swapPreviewMatchesGauge(int256 amount, bool zeroForOne) public {
+        amount = bound(amount, -1000 ether, 1000 ether);
         _initAtOracle();
         _seed();
 
-        (, uint256 s001) = hook.previewFee(poolId, true, -0.01 ether);
-        (, uint256 s100) = hook.previewFee(poolId, false, -100e6);
-        (, uint256 s1k) = hook.previewFee(poolId, false, -1000e6);
+        (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
+        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, zeroForOne, amount);
 
-        assertLt(s001, s100, "~$35 < ~$100");
-        assertLt(s100, s1k, "~$100 < ~$1000");
+        assertEq(swapFee, gaugeFee);
+        assertEq(swapBps, gaugeBps);
     }
 
-    function testFuzz_wethUsdcUsdEquivalent_sameSizeScore(uint256 usdcWhole) public {
-        usdcWhole = bound(usdcWhole, 1, 100_000);
-        _initAtOracle();
-        _seed();
-
-        uint256 usdcRaw = usdcWhole * 1e6;
-        uint256 wethWei = usdcWhole * 1e18 / 3500;
-        vm.assume(wethWei <= uint256(uint128(type(int128).max)));
-        vm.assume(usdcRaw <= uint256(uint128(type(int128).max)));
-
-        int256 wethAmt = -int256(wethWei);
-        int256 usdcAmt = -int256(usdcRaw);
-
-        (, uint256 wethScore) = hook.previewFee(poolId, true, wethAmt);
-        (, uint256 usdcScore) = hook.previewFee(poolId, false, usdcAmt);
-
-        assertApproxEqAbs(wethScore, usdcScore, 3, "WETH/USDC USD parity");
-    }
-
-    function testFuzz_usdcSizeScore_matchesReferenceFormula(uint256 usdcRaw) public {
-        usdcRaw = bound(usdcRaw, 1e4, 500_000e6);
-        _initAtOracle();
-        _seed();
-
-        int256 amount = -int256(usdcRaw);
-        (, uint256 score) = hook.previewFee(poolId, false, amount);
-
-        uint128 liq = manager.getLiquidity(poolId);
-        (uint160 sqrtP,,,) = manager.getSlot0(poolId);
-        uint256 poolPrice8 = _poolPrice8(sqrtP, true);
-        uint256 wethEq = FullMath.mulDiv(usdcRaw, 1e20, poolPrice8);
-        uint256 expected = wethEq * 10_000 / uint256(liq);
-
-        assertEq(score, expected);
-    }
-
-    function testFuzz_doubleTradeSize_doublesSizeScoreWhenDeviationZero() public {
-        uint256 usdcRaw = bound(uint256(keccak256("size")), 1e6, 100_000e6);
-        _initAtOracle();
-        _seed();
-
-        (, uint256 score1) = hook.previewFee(poolId, false, -int256(usdcRaw));
-        (, uint256 score2) = hook.previewFee(poolId, false, -int256(usdcRaw * 2));
-
-        assertApproxEqAbs(score2, score1 * 2, 2);
-    }
-
-    function test_sepoliaTokenOrder_usdEquivalentSymmetric() public {
-        _redeploySepoliaOrder();
-
-        _initAtOracle();
-        _seed();
-
-        // USDC is token0 on Sepolia → zeroForOne=true for USDC in, false for WETH in
-        int256 usdc35 = -35e6;
-        int256 weth001 = -0.01 ether;
-
-        (, uint256 usdcScore) = hook.previewFee(poolId, true, usdc35);
-        (, uint256 wethScore) = hook.previewFee(poolId, false, weth001);
-
-        assertApproxEqAbs(usdcScore, wethScore, 2, "Sepolia token order parity");
-    }
-
-    function testFuzz_sepoliaOrder_usdcFormula(uint256 usdcRaw) public {
-        usdcRaw = bound(usdcRaw, 1e4, 200_000e6);
+    function test_sepoliaTokenOrder_feeSameForBothDirections() public {
         _redeploySepoliaOrder();
         _initAtOracle();
         _seed();
 
-        int256 amount = -int256(usdcRaw);
-        (, uint256 score) = hook.previewFee(poolId, true, amount);
+        (uint24 gaugeFee,) = hook.previewFee(poolId);
+        (uint24 usdcFee,) = hook.previewFee(poolId, true, -35e6);
+        (uint24 wethFee,) = hook.previewFee(poolId, false, -0.01 ether);
 
-        uint128 liq = manager.getLiquidity(poolId);
-        (uint160 sqrtP,,,) = manager.getSlot0(poolId);
-        uint256 poolPrice8 = _poolPrice8(sqrtP, false);
-        uint256 wethEq = FullMath.mulDiv(usdcRaw, 1e20, poolPrice8);
-        assertEq(score, wethEq * 10_000 / uint256(liq));
+        assertEq(usdcFee, gaugeFee);
+        assertEq(wethFee, gaugeFee);
     }
 
     function test_previewFee_swapMatchesBeforeSwap() public {
         _initAtOracle();
         _seed();
 
-        int256 wethAmt = -0.05 ether;
-        int256 usdcAmt = -200e6;
+        (uint24 gauge,) = hook.previewFee(poolId);
+        (uint24 feeW,) = hook.previewFee(poolId, true, -0.05 ether);
+        (uint24 feeU,) = hook.previewFee(poolId, false, -200e6);
 
-        (uint24 feeW,) = hook.previewFee(poolId, true, wethAmt);
-        (uint24 feeU,) = hook.previewFee(poolId, false, usdcAmt);
-
-        assertGe(feeW, hook.LOW_FEE());
-        assertGe(feeU, hook.LOW_FEE());
-        assertLe(feeW, hook.MAX_FEE());
-        assertLe(feeU, hook.MAX_FEE());
+        assertEq(feeW, gauge);
+        assertEq(feeU, gauge);
+        assertGe(gauge, hook.LOW_FEE());
+        assertLe(gauge, hook.MAX_FEE());
     }
 
     // --- helpers ---
@@ -273,12 +199,6 @@ contract DynamicLPFeesHookEconomics is Test, Deployers {
             target = FullMath.mulDiv(1e26, 1 << 192, oraclePrice8 * 1e6);
         }
         return uint160(_sqrt(target));
-    }
-
-    function _poolPrice8(uint160 sqrtP, bool wethToken0) internal pure returns (uint256) {
-        uint256 step = FullMath.mulDiv(uint256(sqrtP), uint256(sqrtP), 1 << 96);
-        if (wethToken0) return FullMath.mulDiv(step, 1e20, 1 << 96);
-        return FullMath.mulDiv(1e20, 1 << 96, step);
     }
 
     function _sqrt(uint256 x) internal pure returns (uint256 z) {
