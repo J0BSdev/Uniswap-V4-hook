@@ -45,8 +45,8 @@ contract AlignSepoliaPool is Script {
     }
 
     function _syncOracle(address feedAddr, int256 oraclePrice8) internal {
-        uint256 now = block.timestamp;
-        MockChainlinkAggregator(feedAddr).setRound(oraclePrice8, now - 120, now - 60);
+        uint256 ts = block.timestamp;
+        MockChainlinkAggregator(feedAddr).setRound(oraclePrice8, ts - 120, ts - 60);
         console2.log("Oracle synced USD:", uint256(oraclePrice8) / 1e8);
     }
 
@@ -98,15 +98,29 @@ contract AlignSepoliaPool is Script {
         internal
     {
         NetworkConfig.Config memory cfg = NetworkConfig.baseSepolia();
-        PoolKey memory key = _poolKey(cfg, hookAddr);
-        PoolId id = key.toId();
-        IPoolManager manager = IPoolManager(poolManager);
-        bool wethToken0 = NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc);
-        uint256 target = uint256(oraclePrice8);
-        bool zeroForOne = !wethToken0;
-
         uint256 usdcBal = IERC20Minimal(cfg.usdc).balanceOf(msg.sender);
         if (usdcBal < 1e4) return;
+
+        _runAlignSwaps(
+            IPoolManager(poolManager),
+            swapRouter,
+            _poolKey(cfg, hookAddr),
+            NetworkConfig.wethIsCurrency0(cfg.weth, cfg.usdc),
+            uint256(oraclePrice8),
+            usdcBal
+        );
+    }
+
+    function _runAlignSwaps(
+        IPoolManager manager,
+        PoolSwapTest swapRouter,
+        PoolKey memory key,
+        bool wethToken0,
+        uint256 target,
+        uint256 usdcBal
+    ) internal {
+        PoolId id = key.toId();
+        bool zeroForOne = !wethToken0;
 
         for (uint256 i = 0; i < 12; i++) {
             if (usdcBal < 1e4) break;
@@ -117,18 +131,23 @@ contract AlignSepoliaPool is Script {
             if (diffBps <= 50) break;
 
             uint256 swapAmt = _swapUsdcAmount(diffBps, usdcBal);
-            int256 usdcIn = -int256(swapAmt);
             console2.log("Swap USDC in:", swapAmt, "diffBps:", diffBps);
-            swapRouter.swap(
-                key,
-                SwapParams({
-                    zeroForOne: zeroForOne, amountSpecified: usdcIn, sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-                }),
-                PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
-                ""
-            );
+            _swapUsdcIn(swapRouter, key, zeroForOne, swapAmt);
             usdcBal -= swapAmt;
         }
+    }
+
+    function _swapUsdcIn(PoolSwapTest swapRouter, PoolKey memory key, bool zeroForOne, uint256 swapAmt) internal {
+        swapRouter.swap(
+            key,
+            SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: -int256(swapAmt),
+                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
     }
 
     function _logResult(address hookAddr, address poolManager, int256 oraclePrice8) internal view {
