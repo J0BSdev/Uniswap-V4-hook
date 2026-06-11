@@ -27,8 +27,10 @@ export function parseSlot0(word: Hex): { sqrtPriceX96: bigint; tick: number } {
 
 export function poolPriceFromSlot0(word: Hex): number | undefined {
   const { sqrtPriceX96 } = parseSlot0(word);
-  if (sqrtPriceX96 === 0n) return undefined;
-  return poolPriceFromSqrt(sqrtPriceX96);
+  if (sqrtPriceX96 <= 4295128740n) return undefined;
+  const price = poolPriceFromSqrt(sqrtPriceX96);
+  if (price === undefined || !Number.isFinite(price) || price < 50) return undefined;
+  return price;
 }
 
 export function liquidityFromSlot(word: Hex): bigint {

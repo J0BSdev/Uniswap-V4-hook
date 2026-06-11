@@ -91,24 +91,32 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   oracleRef.current = oraclePrice;
 
   const live = useLiveFee(CAN_SWAP_ONCHAIN ? 4000 : 8000);
-  const hasLivePool =
-    live.configured &&
-    live.poolPrice !== undefined &&
-    live.poolPrice > 0 &&
-    live.oraclePrice !== undefined &&
-    live.oraclePrice > 0;
+
+  const poolOk = live.poolPrice !== undefined && live.poolPrice > 0;
+  const oracleOk = live.oraclePrice !== undefined && live.oraclePrice > 0;
+  const forkLive = CAN_SWAP_ONCHAIN && live.configured && !live.loading;
+  const hasLivePool = forkLive ? poolOk && oracleOk : live.configured && poolOk && oracleOk;
   const isLive = hasLivePool;
 
   const demoPoolPrice = poolPrice(reserves);
   const demoDev = deviationBps(demoPoolPrice, oraclePrice);
 
-  const pPrice = isLive ? live.poolPrice! : demoPoolPrice;
-  const chainlinkPrice = isLive ? live.chainlinkPrice : undefined;
-  const hookOraclePrice = isLive ? live.oraclePrice : undefined;
-  const dispOracle = isLive ? (live.chainlinkPrice ?? live.oraclePrice!) : oraclePrice;
+  const pPrice = isLive ? live.poolPrice! : forkLive ? (live.poolPrice ?? 0) : demoPoolPrice;
+  const chainlinkPrice = forkLive || isLive ? live.chainlinkPrice : undefined;
+  const hookOraclePrice = forkLive || isLive ? live.oraclePrice : undefined;
+  const dispOracle =
+    forkLive || isLive ? (live.chainlinkPrice ?? live.oraclePrice ?? 0) : oraclePrice;
   const liveDev = deviationBps(pPrice, hookOraclePrice ?? dispOracle);
-  const dev = isLive ? (live.deviationBps ?? liveDev) : demoDev;
-  const feePips = isLive ? (live.feePips ?? feeForDeviationBps(liveDev)) : feeForDeviationBps(demoDev);
+  const dev = isLive
+    ? (live.deviationBps ?? liveDev)
+    : forkLive && live.error
+      ? (live.deviationBps ?? 0)
+      : demoDev;
+  const feePips = isLive
+    ? (live.feePips ?? feeForDeviationBps(liveDev))
+    : forkLive && live.error
+      ? (live.feePips ?? feeForDeviationBps(liveDev))
+      : feeForDeviationBps(demoDev);
   const tier = tierForDeviationBps(dev);
 
   const liquidity = live.liquidity ?? 0n;
@@ -276,15 +284,8 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
   const buildLiveQuoteState = useCallback((): LivePoolState | null => {
-    if (
-      !isLive ||
-      live.sqrtPriceX96 === undefined ||
-      live.liquidity === undefined ||
-      live.poolPrice === undefined ||
-      !tickBounds
-    ) {
-      return null;
-    }
+    const canQuote = (isLive || forkLive) && live.sqrtPriceX96 !== undefined && live.liquidity !== undefined && live.liquidity > 0n && live.poolPrice !== undefined && live.poolPrice > 0 && tickBounds;
+    if (!canQuote) return null;
     return {
       sqrtPriceX96: live.sqrtPriceX96,
       liquidity: live.liquidity,
@@ -294,16 +295,20 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       deviationBpsBefore: live.deviationBps ?? liveDev,
       oraclePrice: hookOraclePrice ?? dispOracle,
     };
-  }, [isLive, live.sqrtPriceX96, live.liquidity, live.poolPrice, live.deviationBps, liveDev, hookOraclePrice, dispOracle, tickBounds]);
+  }, [isLive, forkLive, live.sqrtPriceX96, live.liquidity, live.poolPrice, live.deviationBps, liveDev, hookOraclePrice, dispOracle, tickBounds]);
 
   const quote = useCallback(
     (amountIn: number, dir: SwapDir) => {
       const liveState = buildLiveQuoteState();
       if (liveState) return quoteSwapLive(liveState, amountIn, dir);
+      if (forkLive) {
+        const oracle = hookOraclePrice ?? dispOracle;
+        return quoteSwap({ weth: 0, usdc: 0 }, oracle || 0, amountIn, dir);
+      }
       if (!isLive) return quoteSwap(reserves, oraclePrice, amountIn, dir);
       return quoteSwap({ weth: 0, usdc: 0 }, dispOracle, amountIn, dir);
     },
-    [buildLiveQuoteState, isLive, dispOracle, reserves, oraclePrice]
+    [buildLiveQuoteState, forkLive, isLive, dispOracle, hookOraclePrice, reserves, oraclePrice]
   );
 
   const executeSwap = useCallback(
@@ -356,7 +361,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       isDemo: IS_DEMO,
       isFork: IS_FORK_DEV,
       canNudgeMockOracle: CAN_NUDGE_MOCK_ORACLE,
-      mode: isLive ? "live" : "demo",
+      mode: forkLive || isLive ? "live" : "demo",
       liveError: live.configured ? live.error : undefined,
       liquidity,
       clReserves,
@@ -386,6 +391,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     }),
     [
       isLive,
+      forkLive,
       live.configured,
       live.error,
       liquidity,

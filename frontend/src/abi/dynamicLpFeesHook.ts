@@ -16,6 +16,7 @@ export const dynamicLpFeesHookAbi = [
     stateMutability: "view",
     inputs: [
       { name: "poolId", type: "bytes32" },
+      { name: "zeroForOne", type: "bool" },
       { name: "amountSpecified", type: "int256" },
     ],
     outputs: [

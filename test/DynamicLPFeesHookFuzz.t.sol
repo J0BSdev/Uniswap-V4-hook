@@ -246,7 +246,7 @@ contract DynamicLPFeesHookFuzz is Test, Deployers {
         _addLiquidity();
 
         int256 amount = -int256(swapAmount);
-        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, amount);
+        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, true, amount);
 
         vm.recordLogs();
         _swap(true, amount);

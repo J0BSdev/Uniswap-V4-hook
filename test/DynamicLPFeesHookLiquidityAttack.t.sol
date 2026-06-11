@@ -66,7 +66,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
 
         // Swap almost entire WETH side of the book.
         int256 amount = -int256(uint256(liq));
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, amount);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         assertGe(score, hook.SCORE_HIGH());
         assertEq(fee, hook.VERY_HIGH_FEE());
 
@@ -78,10 +78,10 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     function test_minimalLiquidity_manySmallSwaps_feeStable() public {
         _initAndSeedMinimal();
         int256 amount = -0.001 ether;
-        (uint24 first,) = hook.previewFee(poolId, amount);
+        (uint24 first,) = hook.previewFee(poolId, true, amount);
 
         for (uint256 i = 0; i < 10; i++) {
-            (uint24 preview,) = hook.previewFee(poolId, amount);
+            (uint24 preview,) = hook.previewFee(poolId, true, amount);
             vm.recordLogs();
             _swap(true, amount);
             assertEq(_readAppliedFee(), preview);
@@ -96,7 +96,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     function test_previewFee_int256Min_doesNotBrickView() public {
         _initAndSeedMinimal();
         // Attacker calls preview with worst-case int256 — must not panic.
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, type(int256).min);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, type(int256).min);
         assertGe(fee, hook.MIN_FEE());
         assertLe(fee, hook.MAX_FEE());
         assertLe(fee, LPFeeLibrary.MAX_LP_FEE);
@@ -105,7 +105,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
 
     function test_previewFee_int256Max_doesNotBrickView() public {
         _initAndSeedMinimal();
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, type(int256).max);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, type(int256).max);
         assertGe(fee, hook.MIN_FEE());
         assertLe(fee, hook.MAX_FEE());
         assertEq(fee, hook.VERY_HIGH_FEE());
@@ -115,14 +115,14 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
     function test_previewFee_zeroAmount_ignoresSizeRatio() public {
         _initAndSeedMinimal();
         (uint24 gaugeFee, uint256 gaugeBps) = hook.previewFee(poolId);
-        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, 0);
+        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, 0);
         assertEq(swapFee, gaugeFee);
         assertEq(swapBps, gaugeBps);
     }
 
     function testFuzz_previewFee_neverPanics_randomAmount(int256 amount) public {
         _initAndSeedMinimal();
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, amount);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         assertGe(fee, hook.MIN_FEE());
         assertLe(fee, hook.MAX_FEE());
         assertLe(fee, LPFeeLibrary.MAX_LP_FEE);
@@ -137,8 +137,9 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         uint128 liquidity = manager.getLiquidity(poolId);
         int256 amount = -int256(tradeSize);
 
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, amount);
-        uint256 expectedSize = tradeSize * 10_000 / uint256(liquidity);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
+        uint256 wethEquivalent18 = tradeSize;
+        uint256 expectedSize = wethEquivalent18 * 10_000 / uint256(liquidity);
         uint256 priceScore = _expectedPriceScore();
         uint256 expectedScore = priceScore > expectedSize ? priceScore : expectedSize;
 
@@ -159,7 +160,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         assertEq(gaugeFee, hook.LOW_FEE());
 
         int256 amount = -int256(tradeSize);
-        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, amount);
+        (uint24 swapFee, uint256 swapBps) = hook.previewFee(poolId, true, amount);
 
         uint128 liq = manager.getLiquidity(poolId);
         uint256 sizeBps = tradeSize * 10_000 / uint256(liq);
@@ -185,7 +186,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
 
         int256 amount = zeroForOne ? -int256(tradeSize) : -int256(bound(tradeSize, 1e4, 500_000e6));
 
-        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, amount);
+        (uint24 previewFee, uint256 previewBps) = hook.previewFee(poolId, zeroForOne, amount);
 
         vm.recordLogs();
         bool ok = _trySwap(zeroForOne, amount);
@@ -216,7 +217,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         );
         assertEq(manager.getLiquidity(poolId), 0);
 
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, -1 ether);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, -1 ether);
         assertEq(fee, hook.VERY_HIGH_FEE());
         assertEq(score, type(uint256).max);
         sqrtP; // silence warning
@@ -231,7 +232,7 @@ contract DynamicLPFeesHookLiquidityAttack is Test, Deployers {
         _initAndSeedMinimal();
         int256 amount = int256(outAmount);
 
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, amount);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         assertGe(fee, hook.MIN_FEE());
         assertLe(fee, hook.MAX_FEE());
         _assertFeeMatchesScore(fee, score);

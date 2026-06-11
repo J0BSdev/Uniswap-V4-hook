@@ -77,7 +77,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initPool(_encode(_withBps(oracle8, deltaBps)));
         _seedMinimal();
 
-        (uint24 fee, uint256 score) = hook.previewFee(poolId, amount);
+        (uint24 fee, uint256 score) = hook.previewFee(poolId, true, amount);
         _assertFeeInvariants(fee, score);
         _assertScoreIsMaxComponents(score, amount);
     }
@@ -147,13 +147,13 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
         // Tiny trade so fee is oracle-driven before the spike (size score negligible).
         int256 amt = -1;
-        (uint24 feeBefore,) = hook.previewFee(poolId, amt);
+        (uint24 feeBefore,) = hook.previewFee(poolId, true, amt);
         assertLt(feeBefore, hook.VERY_HIGH_FEE());
 
         // Attacker pumps oracle +50% mid-session (simulates off-chain move).
         priceFeed.setRound(int256(ORACLE * 150 / 100), block.timestamp - 1, block.timestamp);
 
-        (uint24 feeAfter,) = hook.previewFee(poolId, amt);
+        (uint24 feeAfter,) = hook.previewFee(poolId, true, amt);
         assertGt(feeAfter, feeBefore, "oracle spike must raise fee");
         assertEq(feeAfter, hook.VERY_HIGH_FEE());
         assertLe(feeAfter, hook.MAX_FEE());
@@ -165,7 +165,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         int256 amt = -0.01 ether;
 
         priceFeed.setRound(int256(ORACLE / 2), block.timestamp - 1, block.timestamp);
-        (uint24 fee,) = hook.previewFee(poolId, amt);
+        (uint24 fee,) = hook.previewFee(poolId, true, amt);
         assertGe(fee, hook.MEDIUM_FEE());
     }
 
@@ -189,14 +189,14 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
 
         // Moderate whale — moves price but keeps LP removal settleable.
         int256 whale = -0.05 ether;
-        (uint24 feeWhale,) = hook.previewFee(poolId, whale);
+        (uint24 feeWhale,) = hook.previewFee(poolId, true, whale);
         assertGe(feeWhale, hook.MEDIUM_FEE());
 
         _trySwap(true, whale);
 
         // Attacker (or LP) removes seeded position after moving price.
         _removeSeedLiquidity(seededLiq);
-        (uint24 feeAfterDrain,) = hook.previewFee(poolId, -0.001 ether);
+        (uint24 feeAfterDrain,) = hook.previewFee(poolId, true, -0.001 ether);
         assertEq(feeAfterDrain, hook.VERY_HIGH_FEE());
     }
 
@@ -207,8 +207,8 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         int256 single = -1 ether;
         int256 split = -0.1 ether;
 
-        (uint24 feeSingle,) = hook.previewFee(poolId, single);
-        (uint24 feeSplit,) = hook.previewFee(poolId, split);
+        (uint24 feeSingle,) = hook.previewFee(poolId, true, single);
+        (uint24 feeSplit,) = hook.previewFee(poolId, true, split);
 
         // Documented economic property: splitting reduces per-tx size score.
         assertGe(feeSingle, feeSplit, "split swaps can pay lower fee per tx");
@@ -218,8 +218,8 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initParity();
         _seedMinimal();
 
-        (uint24 feeA, uint256 scoreA) = hook.previewFee(poolId, amount);
-        (uint24 feeB, uint256 scoreB) = hook.previewFee(poolId, amount == type(int256).min ? amount : -amount);
+        (uint24 feeA, uint256 scoreA) = hook.previewFee(poolId, true, amount);
+        (uint24 feeB, uint256 scoreB) = hook.previewFee(poolId, true, amount == type(int256).min ? amount : -amount);
 
         assertEq(feeA, feeB);
         assertEq(scoreA, scoreB);
@@ -234,7 +234,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         _initPool(_encode(_withBps(ORACLE, int256(deltaBps))));
         _seedMinimal();
 
-        (uint24 previewFee, uint256 previewScore) = hook.previewFee(poolId, amount);
+        (uint24 previewFee, uint256 previewScore) = hook.previewFee(poolId, zeroForOne, amount);
         _assertFeeInvariants(previewFee, previewScore);
 
         vm.recordLogs();
@@ -285,7 +285,7 @@ contract DynamicLPFeesHookExtreme is Test, Deployers {
         uint128 liq = manager.getLiquidity(poolId);
         int256 amount = -int256(tradeSize);
 
-        (, uint256 score) = hook.previewFee(poolId, amount);
+        (, uint256 score) = hook.previewFee(poolId, true, amount);
         uint256 expectedSize = tradeSize * 10_000 / uint256(liq);
         assertGe(score, expectedSize);
     }

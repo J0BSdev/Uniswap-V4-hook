@@ -1,4 +1,5 @@
 import { poolPriceFromSqrt, WETH_IS_CURRENCY0 } from "../config/contracts";
+import { sqrtPriceSlippageLimit } from "./sqrtPrice";
 import { deviationBps, feeForDeviationBps, feePipsToPercent } from "./feeMath";
 import { getSqrtRatioAtTick } from "./tickMath";
 import type { SwapDir, SwapQuote } from "./demoPool";
@@ -108,6 +109,31 @@ function getNextSqrtPriceFromInput(
     : getNextSqrtPriceFromAmount1RoundingDown(sqrtPX96, liquidity, amountIn, true);
 }
 
+/** Swap limit from exact input size — never fall back to MIN/MAX sqrt. */
+export function sqrtPriceLimitForExactIn(
+  sqrtPriceX96: bigint,
+  liquidity: bigint,
+  amountInWei: bigint,
+  zeroForOne: boolean
+): bigint {
+  const slippageCap = sqrtPriceSlippageLimit(sqrtPriceX96, zeroForOne, 800);
+
+  if (liquidity === 0n || amountInWei === 0n || sqrtPriceX96 <= 0n) {
+    return slippageCap;
+  }
+
+  try {
+    const sqrtNext = getNextSqrtPriceFromInput(sqrtPriceX96, liquidity, amountInWei, zeroForOne);
+    if (zeroForOne) {
+      // Tighter floor: closer to current sqrt (max of expected vs slippage cap).
+      return sqrtNext > slippageCap ? sqrtNext : slippageCap;
+    }
+    return sqrtNext < slippageCap ? sqrtNext : slippageCap;
+  } catch {
+    return slippageCap;
+  }
+}
+
 function toWei(amount: number, decimals: number): bigint {
   const scale = 10 ** decimals;
   return BigInt(Math.floor(amount * scale));
@@ -124,16 +150,31 @@ function absAmountWei(amount: bigint): bigint {
   return -amount;
 }
 
-function sizeRatioBps(liquidity: bigint, amountInWei: bigint): number {
+/** Match hook _tradeWethEquivalent18 + _sizeRatioBps (WETH-normalized, not raw wei). */
+function sizeRatioBps(
+  liquidity: bigint,
+  amountInWei: bigint,
+  zeroForOne: boolean,
+  poolPrice: number
+): number {
   if (liquidity === 0n) return Number.MAX_SAFE_INTEGER;
   const tradeSize = absAmountWei(amountInWei);
+  const isWethIn = WETH_IS_CURRENCY0 ? zeroForOne : !zeroForOne;
+  const poolPrice8 = BigInt(Math.max(1, Math.round(poolPrice * 1e8)));
+  const wethEquivalent18 = isWethIn ? tradeSize : (tradeSize * 10n ** 20n) / poolPrice8;
   const maxMul = (1n << 256n) - 1n;
-  if (tradeSize > maxMul / 10_000n) return Number.MAX_SAFE_INTEGER;
-  return Number((tradeSize * 10_000n) / liquidity);
+  if (wethEquivalent18 > maxMul / 10_000n) return Number.MAX_SAFE_INTEGER;
+  return Number((wethEquivalent18 * 10_000n) / liquidity);
 }
 
-function riskScoreBps(deviationBpsBefore: number, liquidity: bigint, amountInWei: bigint): number {
-  return Math.max(deviationBpsBefore, sizeRatioBps(liquidity, amountInWei));
+function riskScoreBps(
+  deviationBpsBefore: number,
+  liquidity: bigint,
+  amountInWei: bigint,
+  zeroForOne: boolean,
+  poolPrice: number
+): number {
+  return Math.max(deviationBpsBefore, sizeRatioBps(liquidity, amountInWei, zeroForOne, poolPrice));
 }
 
 /**
@@ -151,7 +192,13 @@ export function quoteSwapLive(state: LivePoolState, amountIn: number, dir: SwapD
 
   const priceBefore = state.poolPrice;
   const amountInWei = safeAmount > 0 ? toWei(safeAmount, inDecimals) : 0n;
-  const scoreBps = riskScoreBps(state.deviationBpsBefore, state.liquidity, amountInWei);
+  const scoreBps = riskScoreBps(
+    state.deviationBpsBefore,
+    state.liquidity,
+    amountInWei,
+    zeroForOne,
+    state.poolPrice
+  );
   const feePips = feeForDeviationBps(scoreBps);
   const feePercent = feePipsToPercent(feePips);
   const feeFraction = feePips / 1_000_000;

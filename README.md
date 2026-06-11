@@ -1,78 +1,95 @@
-# Uniswap v4 Protective Hook
+# DynamicLPFeesHook
 
-This project is a work-in-progress Uniswap v4 hook focused on protecting users from bad trades before execution.
+DynamicLPFeesHook is a work-in-progress Uniswap v4 hook focused on protecting liquidity providers by dynamically adjusting swap fees based on execution risk.
 
-The main goal is to add an extra risk layer on top of swaps by checking trade quality, expected slippage, and potential MEV conditions. If the trade looks too risky, the hook should block it.
+Instead of using a fixed fee for every swap, the hook compares the current Uniswap pool price with a Chainlink ETH/USD reference price and also considers trade size relative to pool liquidity. When risk increases, the hook raises the LP fee so liquidity providers are better compensated.
 
 ## Vision
 
-Most users do not manually inspect price impact, slippage settings, pool conditions, or possible MEV exposure before swapping. This hook is intended to act as a defensive filter that helps prevent:
+Liquidity providers are exposed to higher risk when pool prices move away from fair market value or when large trades hit thin liquidity. Static fee pools do not react to these conditions.
 
-- swaps with excessive slippage
-- trades with unusually bad execution quality
-- transactions exposed to obvious sandwich or MEV risk
-- swaps that cross a predefined risk threshold
+This hook is designed to make fees more adaptive:
 
-## Planned Features
+* low risk swaps pay a lower fee
+* higher risk swaps pay a higher fee
+* LPs earn more when execution risk increases
+* the pool becomes more resilient during volatile or abnormal market conditions
 
-- Pre-trade risk scoring for every swap
-- Slippage checks against user-defined or protocol-defined limits
-- Detection of abnormal price movement before execution
-- Basic MEV-aware safeguards
-- Automatic trade rejection when risk is above the allowed threshold
-- Configurable risk parameters for different pools or token pairs
+## How It Works
 
-## How It Should Work
+Before each swap, the hook calculates a risk score using two main signals:
 
-Before a swap is allowed to go through, the hook will evaluate a set of signals such as:
+1. **Pool price vs Chainlink price**
 
-- expected output versus current pool conditions
-- price impact of the trade size
-- slippage tolerance boundaries
-- short-term volatility or sudden pool movement
-- possible signs of front-running or sandwich attack conditions
+The hook reads the current Uniswap pool price and compares it with the Chainlink ETH/USD reference price.
 
-If the final risk score is acceptable, the swap proceeds.
-If the score is too high, the hook reverts and blocks the trade.
+If the pool price is close to the oracle price, the swap is considered lower risk.
 
+If the pool price deviates significantly from the oracle price, the swap is considered higher risk.
 
-## Risk Checks
+2. **Trade size vs pool liquidity**
 
-The first version will focus on simple and practical protections:
+The hook also compares the swap size with the current pool liquidity.
 
-1. Slippage exceeds the allowed limit
-2. Price impact is too large for the selected trade size
-3. Pool state changes too much between quote and execution
-4. Trade appears vulnerable to MEV conditions
-5. Combined risk score passes a maximum threshold
+A larger trade relative to available liquidity increases the risk score.
+
+The final risk score is then used to select a dynamic fee tier.
+
+## Fee Tiers
+
+The hook currently uses simple fee tiers:
+
+* low risk → 0.5%
+* medium risk → 1%
+* high risk → 3%
+* very high risk → 5%
+
+The fee is returned to Uniswap v4 using the dynamic fee override mechanism.
+
+## Main Features
+
+* Uniswap v4 `beforeSwap` hook
+* Dynamic LP fee calculation
+* Chainlink ETH/USD oracle integration
+* Base sequencer uptime check
+* Oracle freshness and incomplete round protection
+* Pool price calculation from `sqrtPriceX96`
+* Trade size / liquidity risk scoring
+* Dynamic-fee-only pool validation
+* WETH/USDC pool validation
+* Frontend-friendly `previewFee` functions
+* `FeeAdjusted` event for tracking fee changes
 
 ## Why This Project
 
-Uniswap v4 hooks make it possible to build custom execution logic directly around swaps. That makes them a strong place to add user protection, especially for less experienced traders who may otherwise accept poor execution without realizing it.
+Most AMM pools use static fee tiers, even though swap risk changes constantly.
 
-This project is meant as an experiment in defensive DeFi infrastructure: a hook that does not try to optimize profit, but instead tries to reduce harmful execution.
+A small swap in a healthy pool is not the same as a large swap during high deviation or low liquidity conditions.
 
-## Status
+DynamicLPFeesHook experiments with a more adaptive model where LPs are compensated based on real execution risk.
 
-Early development.
+The goal is not to block trading by default, but to make liquidity provision more risk-aware.
 
-The current objective is to design and implement a hook that can:
+## Current Status
 
-- inspect swap conditions before execution
-- estimate whether the trade is safe enough
-- revert unsafe trades
+The project is in active development.
+
+The current implementation focuses on:
+
+* comparing Uniswap pool price against Chainlink ETH/USD
+* calculating deviation in basis points
+* measuring trade size relative to liquidity
+* assigning dynamic fee tiers
+* validating oracle and sequencer safety
+* testing safe, risky and edge-case scenarios
 
 ## Roadmap
 
-- Set up the Uniswap v4 hook project structure
-- Define a clear risk model
-- Implement slippage and price impact checks
-- Add MEV-related heuristics
-- Add pool-specific configuration
-- Write tests for safe and unsafe swap scenarios
-- Benchmark gas costs and false positives
+* Improve liquidity-aware risk scoring
+* Add more precise price impact modeling
+* Add optional TWAP or volatility-based scoring
+* Add gas benchmarks
+* Expand test coverage
+* Explore multi-pool and multi-oracle support
 
-## Disclaimer
 
-This project is experimental and not production-ready.
-It is not financial advice, not a guarantee against losses, and not a complete protection against all MEV strategies or market risks.

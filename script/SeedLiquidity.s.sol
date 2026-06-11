@@ -28,8 +28,8 @@ contract SeedLiquidity is Script {
     using PoolIdLibrary for PoolKey;
 
     int24 internal constant TICK_SPACING = 60;
-    // Narrow range around spot; minimal token amounts for fork demo swaps.
-    int24 internal constant TICK_UNITS = 3;
+    // Wider range on fork so demo swaps (≤ few WETH) stay inside active liquidity.
+    int24 internal constant TICK_UNITS = 10;
 
     function run() external returns (address lpRouter, address swapRouter) {
         address hookAddr = vm.envAddress("HOOK_ADDR");

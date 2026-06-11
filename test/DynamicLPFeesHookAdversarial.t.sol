@@ -92,7 +92,7 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _seedLiquidity();
 
         int256 amount = -0.0005 ether;
-        (uint24 previewFee,) = hook.previewFee(poolId, amount);
+        (uint24 previewFee,) = hook.previewFee(poolId, true, amount);
 
         vm.recordLogs();
         _swap(true, amount);
@@ -196,8 +196,8 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _swap(false, amount1);
         uint24 feeOneForZero = _readAppliedFee();
 
-        (uint24 preview0,) = hook.previewFee(poolId, amount0);
-        (uint24 preview1,) = hook.previewFee(poolId, amount1);
+        (uint24 preview0,) = hook.previewFee(poolId, true, amount0);
+        (uint24 preview1,) = hook.previewFee(poolId, false, amount1);
         assertEq(feeZeroForOne, preview0);
         assertEq(feeOneForZero, preview1);
     }
@@ -210,7 +210,7 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
         _initAndSeed(0);
         int256 amount = -0.00001 ether;
         for (uint256 i = 0; i < 5; i++) {
-            (uint24 preview,) = hook.previewFee(poolId, amount);
+            (uint24 preview,) = hook.previewFee(poolId, true, amount);
             vm.recordLogs();
             _swap(true, amount);
             assertEq(_readAppliedFee(), preview);
@@ -223,7 +223,7 @@ contract DynamicLPFeesHookAdversarial is Test, Deployers {
 
     function _assertAppliedFeeEquals(uint24 expected) internal {
         int256 amount = -0.0005 ether;
-        (uint24 preview,) = hook.previewFee(poolId, amount);
+        (uint24 preview,) = hook.previewFee(poolId, true, amount);
         assertEq(preview, expected, "preview tier mismatch");
         vm.recordLogs();
         _swap(true, amount);

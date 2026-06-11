@@ -58,7 +58,10 @@ echo "    Hook:  $HOOK"
 echo "    Pool:  $POOL"
 
 echo "==> Seeding deep concentrated liquidity..."
-SEED_OUT=$(HOOK_ADDR="$HOOK" forge script script/SeedLiquidity.s.sol:SeedLiquidity \
+ORACLE_USD=$(python3 -c "print(int(${REAL_ANSWER:-162641000000}) // 10**8)")
+SEED_WETH_WEI=$(cast to-wei 50 ether)
+SEED_USDC=$(python3 -c "print(int(${ORACLE_USD}) * 50 * 10**6)")
+SEED_OUT=$(HOOK_ADDR="$HOOK" SEED_WETH_WEI="$SEED_WETH_WEI" SEED_USDC="$SEED_USDC" forge script script/SeedLiquidity.s.sol:SeedLiquidity \
   --rpc-url "$RPC" --broadcast --private-key "$KEY" 2>&1)
 ROUTER=$(echo "$SEED_OUT" | grep -oP 'PoolSwapTest \(swap router\): \K0x[a-fA-F0-9]{40}' | head -1)
 TICK_LO=$(echo "$SEED_OUT" | grep -oP 'Tick lower: \K-?[0-9]+' | head -1)

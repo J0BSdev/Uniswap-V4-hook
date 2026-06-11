@@ -7,11 +7,13 @@ import { fmtBps, fmtNum, fmtPct } from "../lib/format";
 import { CAN_SWAP_ONCHAIN } from "../config/contracts";
 import { executeOnchainSwap } from "../lib/swapOnchain";
 
+const DEFAULT_SWAP_AMOUNT = CAN_SWAP_ONCHAIN ? "0.1" : "1";
+
 export function SwapCard() {
   const { quote, executeSwap } = useTerminal();
   const queryClient = useQueryClient();
   const [dir, setDir] = useState<SwapDir>("WETH_TO_USDC");
-  const [amount, setAmount] = useState("1");
+  const [amount, setAmount] = useState(DEFAULT_SWAP_AMOUNT);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
