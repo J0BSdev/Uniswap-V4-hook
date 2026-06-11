@@ -14,8 +14,15 @@ echo "==> Deploying hook + mock Chainlink feeds on Base Sepolia..."
 ORACLE_PRICE8=$(cast call 0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70 \
   "latestRoundData()(uint80,int256,uint256,uint256,uint80)" --rpc-url https://mainnet.base.org | awk 'NR==2 {print $1}')
 echo "    Mainnet Chainlink ETH/USD: $((ORACLE_PRICE8 / 100000000)) USD"
+
+VERIFY_FLAGS=()
+if [ -n "${BASESCAN_API_KEY:-}" ]; then
+  VERIFY_FLAGS=(--verify --etherscan-api-key "$BASESCAN_API_KEY")
+  echo "    Basescan verify: enabled"
+fi
+
 DEPLOY_OUT=$(ORACLE_PRICE8="$ORACLE_PRICE8" forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia \
-  --rpc-url "$RPC" --broadcast --private-key "$KEY" 2>&1)
+  --rpc-url "$RPC" --broadcast --private-key "$KEY" "${VERIFY_FLAGS[@]}" 2>&1)
 
 HOOK=$(echo "$DEPLOY_OUT" | grep -oP 'DynamicLPFeesHook: \K0x[a-fA-F0-9]{40}' | head -1)
 POOL=$(echo "$DEPLOY_OUT" | grep -oP 'POOL_ID: \K0x[a-fA-F0-9]{64}' | head -1)
