@@ -8,6 +8,7 @@ import {
   type Address,
   type Hex,
   type TransactionReceipt,
+  type WalletClient,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia } from "viem/chains";
@@ -89,15 +90,19 @@ export function extractAppliedFeeFromReceipt(
   return { feePips: 0, riskScoreBps: 0 };
 }
 
-/** Executes a real swap through PoolSwapTest using the configured dev key. */
-export async function executeOnchainSwap(
+async function swapWithAccount(
   tokenIn: "WETH" | "USDC",
   amountIn: number,
+  account: Address,
+  walletClient: WalletClient,
   previewFeePips?: number
 ): Promise<OnchainSwapResult> {
-  const { publicClient, walletClient, account } = clients();
+  const rpc = ENV.baseRpcUrl || (ENV.chainId === 84532 ? "https://sepolia.base.org" : "https://mainnet.base.org");
+  const chain = ENV.chainId === 84532 ? baseSepolia : base;
+  const publicClient = createPublicClient({ chain, transport: http(rpc) });
   const router = ENV.swapRouter as Address;
   const hook = ENV.hookAddress as Address;
+  if (!router) throw new Error("VITE_SWAP_ROUTER not configured");
 
   const zeroForOne = WETH_IS_CURRENCY0 ? tokenIn === "WETH" : tokenIn === "USDC";
   const decimals = tokenIn === "WETH" ? 18 : 6;
@@ -108,10 +113,12 @@ export async function executeOnchainSwap(
     address: tokenAddr,
     abi: erc20Abi,
     functionName: "allowance",
-    args: [account.address, router],
+    args: [account, router],
   });
   if (allowance < amountWei) {
     const approveHash = await walletClient.writeContract({
+      account,
+      chain: walletClient.chain ?? chain,
       address: tokenAddr,
       abi: erc20Abi,
       functionName: "approve",
@@ -121,6 +128,8 @@ export async function executeOnchainSwap(
   }
 
   const hash = await walletClient.writeContract({
+    account,
+    chain: walletClient.chain ?? chain,
     address: router,
     abi: poolSwapTestAbi,
     functionName: "swap",
@@ -144,4 +153,28 @@ export async function executeOnchainSwap(
     feePips: feePips > 0 ? feePips : (previewFeePips ?? 0),
     riskScoreBps,
   };
+}
+
+/** Executes a real swap through PoolSwapTest using the configured dev key. */
+export async function executeOnchainSwap(
+  tokenIn: "WETH" | "USDC",
+  amountIn: number,
+  previewFeePips?: number
+): Promise<OnchainSwapResult> {
+  const { walletClient, account } = clients();
+  return swapWithAccount(tokenIn, amountIn, account.address, walletClient, previewFeePips);
+}
+
+/** Swap via connected MetaMask wallet (Sepolia) or dev key when wallet omitted on fork. */
+export async function executeOnchainSwapWithWallet(
+  tokenIn: "WETH" | "USDC",
+  amountIn: number,
+  wallet?: WalletClient,
+  previewFeePips?: number
+): Promise<OnchainSwapResult> {
+  if (wallet) {
+    const [address] = await wallet.getAddresses();
+    return swapWithAccount(tokenIn, amountIn, address, wallet, previewFeePips);
+  }
+  return executeOnchainSwap(tokenIn, amountIn, previewFeePips);
 }

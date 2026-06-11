@@ -14,11 +14,13 @@ export function PricePanel() {
     oracleLive,
     toggleOracleLive,
     setOraclePrice,
+    setPoolPrice,
     nudgeOracle,
     nudgePool,
     refreshOracle,
     syncToChainlink,
     syncOracleBusy,
+    alignPoolBusy,
     resetPool,
     resetPoolBusy,
     mode,
@@ -26,15 +28,24 @@ export function PricePanel() {
     canNudgeMockOracle,
     liveError,
   } = useTerminal();
-  const [draft, setDraft] = useState("");
+  const [oracleDraft, setOracleDraft] = useState("");
+  const [poolDraft, setPoolDraft] = useState("");
   const isLive = mode === "live";
+  const busy = syncOracleBusy || alignPoolBusy || resetPoolBusy;
 
-  const poolAbove = poolPrice >= oraclePrice;
+  const refOracle = chainlinkPrice ?? hookOraclePrice ?? oraclePrice;
+  const poolAbove = poolPrice >= refOracle;
 
-  function applyDraft() {
-    const v = parseFloat(draft);
+  function applyOracleDraft() {
+    const v = parseFloat(oracleDraft);
     if (Number.isFinite(v) && v > 0) void setOraclePrice(v);
-    setDraft("");
+    setOracleDraft("");
+  }
+
+  function applyPoolDraft() {
+    const v = parseFloat(poolDraft);
+    if (Number.isFinite(v) && v > 0) void setPoolPrice(v);
+    setPoolDraft("");
   }
 
   return (
@@ -60,11 +71,7 @@ export function PricePanel() {
         <div className="price-cell">
           <span className="price-label">Pool price</span>
           <span className="price-value">{fmtUsd(poolPrice)}</span>
-          <span className="price-sub">
-            {canNudgeMockOracle && chainlinkPrice !== undefined && Math.abs(poolPrice - chainlinkPrice) / chainlinkPrice > 0.02
-              ? `should be ~${fmtUsd(chainlinkPrice)} (legacy $3500 init)`
-              : "spot from sqrtPriceX96"}
-          </span>
+          <span className="price-sub">spot from sqrtPriceX96</span>
         </div>
         <div className="price-cell">
           <span className="price-label">Chainlink ETH/USD</span>
@@ -107,6 +114,12 @@ export function PricePanel() {
       {isLive && isFork ? (
         <>
           <div className="fork-controls">
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void syncToChainlink()}>
+              {busy ? "Aligning…" : "Align to Chainlink"}
+            </button>
+            <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void resetPool()}>
+              Reset pool
+            </button>
             <span className="fork-label">Oracle</span>
             <button className="btn btn-ghost btn-sm" onClick={() => void nudgeOracle(-1)}>
               −1%
@@ -118,37 +131,43 @@ export function PricePanel() {
             <button className="btn btn-ghost btn-sm" onClick={() => void nudgePool(3)}>
               Swap 3 WETH ↓
             </button>
-            <button className="btn btn-ghost btn-sm" disabled={resetPoolBusy} onClick={() => void resetPool()}>
-              {resetPoolBusy ? "Resetting…" : "Reset pool"}
+          </div>
+          <div className="oracle-control">
+            <input
+              className="input"
+              placeholder="Set pool ETH/USD…"
+              value={poolDraft}
+              onChange={(e) => setPoolDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyPoolDraft()}
+              inputMode="decimal"
+            />
+            <button className="btn btn-ghost" disabled={alignPoolBusy} onClick={applyPoolDraft}>
+              Set pool
             </button>
           </div>
           <div className="oracle-control">
             <input
               className="input"
               placeholder="Set oracle ETH/USD…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              value={oracleDraft}
+              onChange={(e) => setOracleDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyOracleDraft()}
               inputMode="decimal"
             />
-            <button className="btn btn-ghost" onClick={applyDraft}>
-              Set
+            <button className="btn btn-ghost" onClick={applyOracleDraft}>
+              Set oracle
             </button>
           </div>
           <p className="hint">
-            Fork mode: oracle auto-drifts every 4s (toggle above). Use buttons or swap to create divergence and
-            watch the fee tier react via real <code>previewFee</code>.
+            Fork mode: use <strong>Align to Chainlink</strong> or <strong>Set pool</strong> to move spot price + oracle
+            together. Swaps run via the local dev key.
           </p>
         </>
-      ) : isLive && canNudgeMockOracle ? (
+      ) : isLive && (canNudgeMockOracle || isFork) ? (
         <>
           <div className="fork-controls">
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={syncOracleBusy}
-              onClick={() => void syncToChainlink()}
-            >
-              {syncOracleBusy ? "Syncing…" : "Sync to Chainlink"}
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void syncToChainlink()}>
+              {busy ? "Aligning…" : "Align to Chainlink"}
             </button>
             {liveError?.includes("stale") && (
               <button className="btn btn-ghost btn-sm" onClick={() => void refreshOracle()}>
@@ -168,36 +187,32 @@ export function PricePanel() {
           <div className="oracle-control">
             <input
               className="input"
-              placeholder="Set hook oracle ETH/USD…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              placeholder="Set pool ETH/USD…"
+              value={poolDraft}
+              onChange={(e) => setPoolDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyPoolDraft()}
               inputMode="decimal"
             />
-            <button className="btn btn-ghost" onClick={applyDraft}>
-              Set
+            <button className="btn btn-ghost" disabled={alignPoolBusy} onClick={applyPoolDraft}>
+              Set pool
+            </button>
+          </div>
+          <div className="oracle-control">
+            <input
+              className="input"
+              placeholder="Set hook oracle ETH/USD…"
+              value={oracleDraft}
+              onChange={(e) => setOracleDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyOracleDraft()}
+              inputMode="decimal"
+            />
+            <button className="btn btn-ghost" onClick={applyOracleDraft}>
+              Set oracle
             </button>
           </div>
           <p className="hint">
-            Pool was initialized at $3500. Chainlink is live from mainnet (~$
-            {chainlinkPrice ? Math.round(chainlinkPrice) : "1625"}). Connect wallet and click{" "}
-            <strong>Sync to Chainlink</strong> for the mock oracle; to move the pool spot price on-chain run{" "}
-            <code>bash script/align-sepolia-pool.sh</code> (needs Sepolia WETH + USDC).
-          </p>
-        </>
-      ) : isLive && canNudgeMockOracle && liveError?.includes("stale") ? (
-        <>
-          <div className="fork-controls">
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={syncOracleBusy}
-              onClick={() => void syncToChainlink()}
-            >
-              {syncOracleBusy ? "Syncing…" : "Sync to Chainlink"}
-            </button>
-          </div>
-          <p className="hint">
-            Connect MetaMask on Base Sepolia to sync the mock oracle to the live Chainlink price.
+            Connect MetaMask on Base Sepolia. <strong>Align to Chainlink</strong> / <strong>Set pool</strong> sync the
+            mock oracle and swap the pool toward your target (needs WETH + USDC + gas).
           </p>
         </>
       ) : isLive ? (
@@ -211,12 +226,12 @@ export function PricePanel() {
             <input
               className="input"
               placeholder="Set oracle ETH/USD…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyDraft()}
+              value={oracleDraft}
+              onChange={(e) => setOracleDraft(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && applyOracleDraft()}
               inputMode="decimal"
             />
-            <button className="btn btn-ghost" onClick={applyDraft}>
+            <button className="btn btn-ghost" onClick={applyOracleDraft}>
               Set
             </button>
           </div>

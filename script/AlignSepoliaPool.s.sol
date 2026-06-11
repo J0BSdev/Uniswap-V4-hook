@@ -105,15 +105,20 @@ contract AlignSepoliaPool is Script {
         uint256 target = uint256(oraclePrice8);
         bool zeroForOne = !wethToken0;
 
+        uint256 usdcBal = IERC20Minimal(cfg.usdc).balanceOf(msg.sender);
+        if (usdcBal < 1e4) return;
+
         for (uint256 i = 0; i < 12; i++) {
+            if (usdcBal < 1e4) break;
             (uint160 sqrtPriceX96,,,) = manager.getSlot0(id);
             uint256 poolPrice8 = _poolPrice8(sqrtPriceX96, wethToken0);
             if (poolPrice8 <= target) break;
             uint256 diffBps = ((poolPrice8 - target) * 10_000) / target;
             if (diffBps <= 50) break;
 
-            int256 usdcIn = -int256(_swapUsdcAmount(diffBps));
-            console2.log("Swap USDC in:", uint256(-usdcIn), "diffBps:", diffBps);
+            uint256 swapAmt = _swapUsdcAmount(diffBps, usdcBal);
+            int256 usdcIn = -int256(swapAmt);
+            console2.log("Swap USDC in:", swapAmt, "diffBps:", diffBps);
             swapRouter.swap(
                 key,
                 SwapParams({
@@ -122,6 +127,7 @@ contract AlignSepoliaPool is Script {
                 PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
                 ""
             );
+            usdcBal -= swapAmt;
         }
     }
 

@@ -20,12 +20,13 @@ import {
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, ENV, IS_DEMO } from "../config/contracts";
+import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, CAN_SWAP_WITH_WALLET, ENV, IS_DEMO } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
 import { quoteSwapLive, type LivePoolState } from "../lib/clQuote";
 import { reservesFromLiquidity } from "../lib/clReserves";
 import { resolveTickBounds } from "../lib/poolTicks";
 import { nudgeForkOracle, readForkOraclePrice, refreshMockOracleWithWallet, requestKeeperOracleSync, setForkOraclePrice, syncOracleToChainlink } from "../lib/forkOracle";
+import { alignPoolToChainlink, alignPoolToTarget } from "../lib/alignPool";
 import { resetForkPoolState } from "../lib/forkReset";
 import { executeOnchainSwap } from "../lib/swapOnchain";
 
@@ -60,6 +61,8 @@ interface TerminalState {
   events: FeeEvent[];
   oracleLive: boolean;
   setOraclePrice: (p: number) => Promise<void>;
+  setPoolPrice: (p: number) => Promise<void>;
+  alignPoolBusy: boolean;
   nudgeOracle: (deltaPct: number) => Promise<void>;
   nudgePool: (wethAmount?: number) => Promise<void>;
   toggleOracleLive: () => void;
@@ -82,7 +85,9 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<FeeEvent[]>([]);
   const [resetPoolBusy, setResetPoolBusy] = useState(false);
   const [syncOracleBusy, setSyncOracleBusy] = useState(false);
-  const syncAttempted = useRef(false);
+  const [alignPoolBusy, setAlignPoolBusy] = useState(false);
+  const poolAlignAttempted = useRef(false);
+  const oracleSyncAttempted = useRef(false);
   const oracleRef = useRef(oraclePrice);
   oracleRef.current = oraclePrice;
 
@@ -141,9 +146,16 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   }, [oracleWallet, queryClient, pushEvent, feePips, dev]);
 
   const syncToChainlink = useCallback(async () => {
-    if (!CAN_NUDGE_MOCK_ORACLE) return;
+    if (!CAN_NUDGE_MOCK_ORACLE && !CAN_SWAP_ONCHAIN) return;
     setSyncOracleBusy(true);
     try {
+      const wallet = oracleWallet ?? (CAN_SWAP_ONCHAIN ? undefined : undefined);
+      if (CAN_SWAP_ONCHAIN) {
+        const synced = await alignPoolToChainlink(wallet);
+        await queryClient.invalidateQueries();
+        pushEvent(feeForDeviationBps(0), 0, `Aligned to Chainlink $${synced.toFixed(2)}`);
+        return;
+      }
       if (oracleWallet) {
         const synced = await syncOracleToChainlink(oracleWallet);
         await queryClient.invalidateQueries();
@@ -160,15 +172,53 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
     }
   }, [oracleWallet, queryClient, pushEvent, feePips, dev]);
 
+  const setPoolPrice = useCallback(
+    async (p: number) => {
+      const target = Math.max(100, p);
+      setAlignPoolBusy(true);
+      try {
+        const wallet = CAN_SWAP_ONCHAIN ? undefined : oracleWallet;
+        if (!CAN_SWAP_ONCHAIN && !CAN_SWAP_WITH_WALLET) {
+          throw new Error("Swap router not configured");
+        }
+        if (!CAN_SWAP_ONCHAIN && !wallet) {
+          throw new Error("Connect MetaMask on Base Sepolia to set pool price");
+        }
+        const result = await alignPoolToTarget(target, wallet);
+        await queryClient.invalidateQueries();
+        pushEvent(feeForDeviationBps(0), 0, `Pool aligned to $${result.toFixed(2)}`);
+      } finally {
+        setAlignPoolBusy(false);
+      }
+    },
+    [oracleWallet, queryClient, pushEvent]
+  );
+
   useEffect(() => {
-    if (!CAN_NUDGE_MOCK_ORACLE || !isLive || syncAttempted.current) return;
+    if (!CAN_SWAP_ONCHAIN || !isLive || poolAlignAttempted.current) return;
+    if (!live.chainlinkPrice || !live.poolPrice) return;
+    if (deviationBps(live.poolPrice, live.chainlinkPrice) <= 50) return;
+
+    poolAlignAttempted.current = true;
+    void (async () => {
+      try {
+        await alignPoolToChainlink();
+        await queryClient.invalidateQueries();
+      } catch {
+        /* anvil not running or swap failed */
+      }
+    })();
+  }, [isLive, live.chainlinkPrice, live.poolPrice, queryClient]);
+
+  useEffect(() => {
+    if (!CAN_NUDGE_MOCK_ORACLE || CAN_SWAP_ONCHAIN || !isLive || oracleSyncAttempted.current) return;
     if (!live.chainlinkPrice || !live.oraclePrice) return;
 
     const driftBps = deviationBps(live.oraclePrice, live.chainlinkPrice);
     const stale = live.error?.includes("stale");
     if (!stale && driftBps < 50) return;
 
-    syncAttempted.current = true;
+    oracleSyncAttempted.current = true;
     void syncToChainlink();
   }, [isLive, live.chainlinkPrice, live.oraclePrice, live.error, syncToChainlink]);
 
@@ -299,12 +349,12 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const resetPool = useCallback(async () => {
     setResetPoolBusy(true);
     try {
-      if (isLive && CAN_SWAP_ONCHAIN) {
+      if (isLive && (CAN_SWAP_ONCHAIN || oracleWallet)) {
         setOracleLive(false);
-        const synced = await resetForkPoolState(oracleWallet);
+        const synced = await resetForkPoolState(CAN_SWAP_ONCHAIN ? undefined : oracleWallet);
         await queryClient.invalidateQueries();
         setEvents([]);
-        pushEvent(feeForDeviationBps(0), 0, `Pool reset — oracle synced to $${synced.toFixed(2)}`);
+        pushEvent(feeForDeviationBps(0), 0, `Pool aligned to Chainlink $${synced.toFixed(2)}`);
         return;
       }
       setReserves(INITIAL_RESERVES);
@@ -329,6 +379,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       refreshOracle,
       syncToChainlink,
       syncOracleBusy,
+      alignPoolBusy,
       reserves,
       oraclePrice: dispOracle,
       chainlinkPrice,
@@ -340,6 +391,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       events,
       oracleLive,
       setOraclePrice,
+      setPoolPrice,
       nudgeOracle,
       nudgePool,
       toggleOracleLive,
@@ -357,6 +409,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       refreshOracle,
       syncToChainlink,
       syncOracleBusy,
+      alignPoolBusy,
       reserves,
       dispOracle,
       chainlinkPrice,
@@ -368,6 +421,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       events,
       oracleLive,
       setOraclePrice,
+      setPoolPrice,
       nudgeOracle,
       nudgePool,
       toggleOracleLive,
