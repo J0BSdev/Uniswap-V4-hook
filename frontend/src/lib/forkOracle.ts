@@ -4,7 +4,7 @@ import { base, baseSepolia } from "viem/chains";
 import { BASE, CAN_SWAP_ONCHAIN, ENV } from "../config/contracts";
 import { aggregatorAbi } from "../abi/external";
 import { readMainnetChainlinkEthUsd } from "./chainlinkRef";
-import { createAppPublicClient } from "./rpcClient";
+import { createAppPublicClient, forkBlockTimestamp, resolveRpcUrl } from "./rpcClient";
 import type { Hex } from "viem";
 
 const chain = ENV.chainId === 84532 ? baseSepolia : base;
@@ -25,13 +25,18 @@ const mockOracleAbi = [
 ] as const;
 
 function devClients() {
-  const rpc = ENV.baseRpcUrl || "http://127.0.0.1:8545";
   const account = privateKeyToAccount(ENV.devPrivateKey as Hex);
-  const transport = http(rpc);
+  const transport = http(resolveRpcUrl());
   return {
     public: createAppPublicClient(),
     wallet: createWalletClient({ chain, transport, account }),
+    account,
   };
+}
+
+async function oracleRoundTimes(): Promise<{ startedAt: bigint; updatedAt: bigint }> {
+  const ts = await forkBlockTimestamp();
+  return { startedAt: ts - 120n, updatedAt: ts - 60n };
 }
 
 /** Read the current ETH/USD price from the Chainlink (or mock) feed. */
@@ -48,7 +53,7 @@ export async function readForkOraclePrice(): Promise<number> {
 async function writeMockOracleRound(wallet: WalletClient, priceUsd: number): Promise<void> {
   const pub = createAppPublicClient();
   const [account] = await wallet.getAddresses();
-  const now = BigInt(Math.floor(Date.now() / 1000));
+  const { startedAt, updatedAt } = await oracleRoundTimes();
   const answer = BigInt(Math.round(Math.max(100, priceUsd) * 1e8));
   const hash = await wallet.writeContract({
     chain,
@@ -56,7 +61,7 @@ async function writeMockOracleRound(wallet: WalletClient, priceUsd: number): Pro
     address: BASE.ethUsdFeed,
     abi: mockOracleAbi,
     functionName: "setRound",
-    args: [answer, now - 120n, now - 60n],
+    args: [answer, startedAt, updatedAt],
   });
   await pub.waitForTransactionReceipt({ hash });
 }
@@ -74,14 +79,16 @@ export async function setForkOraclePrice(priceUsd: number, wallet?: WalletClient
     return;
   }
   if (!CAN_SWAP_ONCHAIN) return;
-  const { public: pub, wallet: devWallet } = devClients();
-  const now = BigInt(Math.floor(Date.now() / 1000));
+  const { public: pub, wallet: devWallet, account } = devClients();
+  const { startedAt, updatedAt } = await oracleRoundTimes();
   const answer = BigInt(Math.round(Math.max(100, priceUsd) * 1e8));
   const hash = await devWallet.writeContract({
+    chain,
+    account,
     address: BASE.ethUsdFeed,
     abi: mockOracleAbi,
     functionName: "setRound",
-    args: [answer, now - 120n, now - 60n],
+    args: [answer, startedAt, updatedAt],
   });
   await pub.waitForTransactionReceipt({ hash });
 }

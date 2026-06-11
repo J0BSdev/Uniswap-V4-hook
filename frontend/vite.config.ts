@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       proxy: {
+        "/rpc-mainnet": {
+          target: "https://mainnet.base.org",
+          changeOrigin: true,
+          rewrite: () => "/",
+        },
         "/rpc": {
           target: "http://127.0.0.1:8545",
           changeOrigin: true,

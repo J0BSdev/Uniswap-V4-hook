@@ -30,6 +30,12 @@ export function poolPrice(r: PoolReserves): number {
   return r.usdc / r.weth;
 }
 
+/** Synthetic x*y=k reserves for quoting at a given spot ETH/USD (no on-chain LP needed). */
+export function virtualReservesFromPrice(poolPriceUsd: number, weth = 1000): PoolReserves {
+  const p = Number.isFinite(poolPriceUsd) && poolPriceUsd > 0 ? poolPriceUsd : 0;
+  return { weth, usdc: p * weth };
+}
+
 export const INITIAL_RESERVES: PoolReserves = { weth: 1000, usdc: 3_500_000 };
 export const INITIAL_ORACLE = 3500;
 

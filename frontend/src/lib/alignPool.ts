@@ -1,9 +1,9 @@
 import { type Hex, type WalletClient } from "viem";
-import { BASE, ENV } from "../config/contracts";
+import { BASE, ENV, IS_FORK_DEV } from "../config/contracts";
 import { poolManagerAbi } from "../abi/external";
 import { deviationBps } from "./feeMath";
 import { readMainnetChainlinkEthUsd } from "./chainlinkRef";
-import { setForkOraclePrice, syncOracleToChainlink } from "./forkOracle";
+import { setForkOraclePrice } from "./forkOracle";
 import { poolPriceFromSlot0, poolStateSlot } from "./poolState";
 import { createAppPublicClient, requireHex } from "./rpcClient";
 import { executeOnchainSwapWithWallet } from "./swapOnchain";
@@ -67,6 +67,11 @@ export async function alignPoolToTarget(targetUsd: number, wallet?: WalletClient
   const target = Math.max(100, targetUsd);
   await setForkOraclePrice(target, wallet);
 
+  // Fork demo: no reliable in-range LP — syncing the mock oracle is enough for fee reset.
+  if (IS_FORK_DEV) {
+    return readOnChainPoolPrice();
+  }
+
   for (let i = 0; i < (ON_SEPOLIA ? 32 : 16); i++) {
     const poolPrice = await readOnChainPoolPrice();
     const diffBps = deviationBps(poolPrice, target);
@@ -74,7 +79,12 @@ export async function alignPoolToTarget(targetUsd: number, wallet?: WalletClient
 
     const tokenIn = swapTokenToMovePrice(poolPrice, target);
     const amountIn = swapAmountForAlign(tokenIn, diffBps);
-    await executeOnchainSwapWithWallet(tokenIn, amountIn, wallet, undefined, target);
+    try {
+      await executeOnchainSwapWithWallet(tokenIn, amountIn, wallet, undefined, target);
+    } catch {
+      // Pool may lack in-range LP — oracle is already synced; return best-effort spot.
+      return poolPrice;
+    }
   }
 
   return readOnChainPoolPrice();
@@ -83,7 +93,5 @@ export async function alignPoolToTarget(targetUsd: number, wallet?: WalletClient
 /** Align oracle + pool to live Base mainnet Chainlink ETH/USD. */
 export async function alignPoolToChainlink(wallet?: WalletClient): Promise<number> {
   const target = await readMainnetChainlinkEthUsd();
-  if (wallet) return alignPoolToTarget(target, wallet);
-  await syncOracleToChainlink();
-  return alignPoolToTarget(target);
+  return alignPoolToTarget(target, wallet);
 }

@@ -53,7 +53,7 @@ export function FeeGauge() {
 
       <div className="gauge-foot">
         <span>{feePips.toLocaleString()} pips</span>
-        <span className="muted">gauge from previewFee · swap fee may be higher for large trades</span>
+        <span className="muted">gauge from previewFee · oracle deviation only</span>
       </div>
     </section>
   );

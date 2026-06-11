@@ -6,8 +6,6 @@ import { deviationBps as calcDeviationBps, feeForDeviationBps } from "../lib/fee
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { aggregatorAbi, poolManagerAbi } from "../abi/external";
 import {
-  liquidityFromSlot,
-  poolLiquiditySlot,
   poolPriceFromSlot0,
   poolStateSlot,
   parseSlot0,
@@ -27,7 +25,6 @@ export interface LiveFeeSnapshot {
   chainlinkPrice?: number;
   poolPrice?: number;
   sqrtPriceX96?: bigint;
-  liquidity?: bigint;
   tick?: number;
 }
 
@@ -48,20 +45,13 @@ async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loa
   const hookAddress = requireHex(ENV.hookAddress, "VITE_HOOK_ADDRESS");
   const poolId = requireHex(ENV.poolId, "VITE_POOL_ID");
   const stateSlot = poolStateSlot(poolId);
-  const liqSlot = poolLiquiditySlot(poolId);
 
-  const [slotWord, liqWord, oracleRes] = await Promise.all([
+  const [slotWord, oracleRes] = await Promise.all([
     client.readContract({
       address: BASE.poolManager,
       abi: poolManagerAbi,
       functionName: "extsload",
       args: [stateSlot],
-    }),
-    client.readContract({
-      address: BASE.poolManager,
-      abi: poolManagerAbi,
-      functionName: "extsload",
-      args: [liqSlot],
     }),
     client.readContract({
       address: BASE.ethUsdFeed,
@@ -73,7 +63,6 @@ async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loa
   const slotHex = slotWord as Hex;
   const { sqrtPriceX96, tick } = parseSlot0(slotHex);
   const poolPrice = poolPriceFromSlot0(slotHex);
-  const liquidity = liquidityFromSlot(liqWord as Hex);
   const [, oracleAnswer] = oracleRes;
   const oraclePrice = Number(oracleAnswer) / 1e8;
 
@@ -120,7 +109,6 @@ async function fetchLiveFee(): Promise<Omit<LiveFeeSnapshot, "configured" | "loa
     chainlinkPrice,
     poolPrice,
     sqrtPriceX96: sqrtPriceX96 > 0n ? sqrtPriceX96 : undefined,
-    liquidity,
     tick,
   };
 }
@@ -152,7 +140,6 @@ export function useLiveFee(pollMs = 8000): LiveFeeSnapshot {
           ...data,
           poolPrice: lastGood.current.poolPrice,
           sqrtPriceX96: lastGood.current.sqrtPriceX96 ?? data.sqrtPriceX96,
-          liquidity: data.liquidity ?? lastGood.current.liquidity,
           deviationBps: data.deviationBps ?? lastGood.current.deviationBps,
           feePips: data.feePips ?? lastGood.current.feePips,
         }

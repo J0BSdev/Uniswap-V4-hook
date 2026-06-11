@@ -3,9 +3,16 @@ import { base } from "viem/chains";
 import { BASE_MAINNET } from "../config/contracts";
 import { aggregatorAbi } from "../abi/external";
 
+function mainnetRpcUrl(): string {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/rpc-mainnet`;
+  }
+  return "https://mainnet.base.org";
+}
+
 const mainnetClient = createPublicClient({
   chain: base,
-  transport: http("https://mainnet.base.org"),
+  transport: http(mainnetRpcUrl()),
 });
 
 /** Live Chainlink ETH/USD from Base mainnet (the real feed the hook uses in production). */

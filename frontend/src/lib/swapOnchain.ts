@@ -15,10 +15,9 @@ import { base, baseSepolia } from "viem/chains";
 import { BASE, ENV, POOL_CURRENCIES, WETH_IS_CURRENCY0 } from "../config/contracts";
 import { dynamicLpFeesHookAbi } from "../abi/dynamicLpFeesHook";
 import { erc20Abi, poolManagerAbi, poolSwapTestAbi } from "../abi/external";
-import { sqrtPriceLimitForTarget } from "./sqrtPrice";
-import { sqrtPriceLimitForExactIn } from "./clQuote";
-import { parseSlot0, poolStateSlot, liquidityFromSlot, poolLiquiditySlot } from "./poolState";
-import { requireHex } from "./rpcClient";
+import { sqrtPriceSlippageLimit, sqrtPriceLimitForTarget } from "./sqrtPrice";
+import { parseSlot0, poolStateSlot } from "./poolState";
+import { requireHex, resolveRpcUrl } from "./rpcClient";
 
 const DYNAMIC_FEE_FLAG = 0x800000;
 const OVERRIDE_FEE_MASK = 0xbfffff;
@@ -31,9 +30,8 @@ export interface OnchainSwapResult {
 }
 
 function clients() {
-  const rpc = ENV.baseRpcUrl || "https://mainnet.base.org";
   const account = privateKeyToAccount(ENV.devPrivateKey as Hex);
-  const transport = http(rpc);
+  const transport = http(resolveRpcUrl());
   const chain = ENV.chainId === 84532 ? baseSepolia : base;
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ chain, transport, account });
@@ -100,7 +98,7 @@ async function swapWithAccount(
   previewFeePips?: number,
   targetPoolUsd?: number
 ): Promise<OnchainSwapResult> {
-  const rpc = ENV.baseRpcUrl || (ENV.chainId === 84532 ? "https://sepolia.base.org" : "https://mainnet.base.org");
+  const rpc = resolveRpcUrl();
   const chain = ENV.chainId === 84532 ? baseSepolia : base;
   const publicClient = createPublicClient({ chain, transport: http(rpc) });
   const router = ENV.swapRouter as Address;
@@ -123,21 +121,11 @@ async function swapWithAccount(
   if (sqrtPriceX96 <= 4295128740n) {
     throw new Error("Pool price collapsed — run: bash script/setup-fork.sh");
   }
-  const liqWord = await publicClient.readContract({
-    address: BASE.poolManager,
-    abi: poolManagerAbi,
-    functionName: "extsload",
-    args: [poolLiquiditySlot(poolId)],
-  });
-  const liquidity = liquidityFromSlot(liqWord as Hex);
-  if (liquidity === 0n) {
-    throw new Error("No active liquidity in range — run: bash script/setup-fork.sh");
-  }
 
   const priceLimit =
     targetPoolUsd !== undefined
       ? sqrtPriceLimitForTarget(targetPoolUsd, zeroForOne)
-      : sqrtPriceLimitForExactIn(sqrtPriceX96, liquidity, amountWei, zeroForOne);
+      : sqrtPriceSlippageLimit(sqrtPriceX96, zeroForOne, 800);
 
   const allowance = await publicClient.readContract({
     address: tokenAddr,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTerminal } from "../state/TerminalContext";
-import { fmtBps, fmtNum, fmtUsd } from "../lib/format";
+import { fmtBps, fmtUsd } from "../lib/format";
 
 export function PricePanel() {
   const {
@@ -9,8 +9,6 @@ export function PricePanel() {
     chainlinkPrice,
     hookOraclePrice,
     deviationBps,
-    clReserves,
-    liquidity,
     oracleLive,
     toggleOracleLive,
     setOraclePrice,
@@ -20,6 +18,7 @@ export function PricePanel() {
     refreshOracle,
     syncToChainlink,
     syncOracleBusy,
+    syncError,
     alignPoolBusy,
     resetPool,
     resetPoolBusy,
@@ -87,13 +86,6 @@ export function PricePanel() {
             <span className="price-sub">on-chain · Sepolia hook feed</span>
           </div>
         )}
-        {clReserves && (
-          <div className="price-cell">
-            <span className="price-label">CL depth (seeded range)</span>
-            <span className="price-value">{fmtNum(clReserves.weth)} WETH</span>
-            <span className="price-sub">{fmtNum(clReserves.usdc)} USDC · L={liquidity.toString()}</span>
-          </div>
-        )}
       </div>
 
       <div className="dev-row">
@@ -110,6 +102,12 @@ export function PricePanel() {
           <strong>{fmtBps(deviationBps)}</strong>
         </div>
       </div>
+
+      {(syncError || liveError) && (
+        <p className="hint" style={{ color: "var(--danger, #ff4d5e)" }}>
+          {syncError ?? liveError}
+        </p>
+      )}
 
       {isLive && isFork ? (
         <>

@@ -15,16 +15,14 @@ import {
   INITIAL_RESERVES,
   poolPrice,
   quoteSwap,
+  virtualReservesFromPrice,
   type PoolReserves,
   type SwapDir,
   type SwapQuote,
 } from "../lib/demoPool";
 import { deviationBps, feeForDeviationBps, tierForDeviationBps, type Tier } from "../lib/feeMath";
-import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, CAN_SWAP_WITH_WALLET, ENV, IS_DEMO, IS_FORK_DEV } from "../config/contracts";
+import { CAN_NUDGE_MOCK_ORACLE, CAN_SWAP_ONCHAIN, CAN_SWAP_WITH_WALLET, IS_DEMO, IS_FORK_DEV } from "../config/contracts";
 import { useLiveFee } from "../hooks/useLiveFee";
-import { quoteSwapLive, type LivePoolState } from "../lib/clQuote";
-import { reservesFromLiquidity } from "../lib/clReserves";
-import { resolveTickBounds } from "../lib/poolTicks";
 import { nudgeForkOracle, readForkOraclePrice, refreshMockOracleWithWallet, requestKeeperOracleSync, setForkOraclePrice, syncOracleToChainlink } from "../lib/forkOracle";
 import { alignPoolToChainlink, alignPoolToTarget } from "../lib/alignPool";
 import { resetForkPoolState } from "../lib/forkReset";
@@ -45,11 +43,10 @@ interface TerminalState {
   canNudgeMockOracle: boolean;
   mode: "demo" | "live";
   liveError?: string;
-  liquidity: bigint;
-  clReserves: PoolReserves | null;
   refreshOracle: () => Promise<void>;
   syncToChainlink: () => Promise<void>;
   syncOracleBusy: boolean;
+  syncError?: string;
   reserves: PoolReserves;
   oraclePrice: number;
   chainlinkPrice?: number;
@@ -85,6 +82,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<FeeEvent[]>([]);
   const [resetPoolBusy, setResetPoolBusy] = useState(false);
   const [syncOracleBusy, setSyncOracleBusy] = useState(false);
+  const [syncError, setSyncError] = useState<string | undefined>();
   const [alignPoolBusy, setAlignPoolBusy] = useState(false);
   const oracleSyncAttempted = useRef(false);
   const oracleRef = useRef(oraclePrice);
@@ -119,14 +117,6 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       : feeForDeviationBps(demoDev);
   const tier = tierForDeviationBps(dev);
 
-  const liquidity = live.liquidity ?? 0n;
-  const tickBounds = resolveTickBounds(live.tick, ENV.lpTickLower, ENV.lpTickUpper);
-
-  const clReserves = useMemo(() => {
-    if (!isLive || live.sqrtPriceX96 === undefined || liquidity === 0n || !tickBounds) return null;
-    return reservesFromLiquidity(liquidity, live.sqrtPriceX96, tickBounds.lower, tickBounds.upper);
-  }, [isLive, live.sqrtPriceX96, liquidity, tickBounds]);
-
   const oracleWallet = CAN_NUDGE_MOCK_ORACLE ? walletClient : undefined;
 
   const pushEvent = useCallback((feePips: number, devBps: number, note: string) => {
@@ -155,6 +145,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
   const syncToChainlink = useCallback(async () => {
     if (!CAN_NUDGE_MOCK_ORACLE && !CAN_SWAP_ONCHAIN) return;
     setSyncOracleBusy(true);
+    setSyncError(undefined);
     try {
       const wallet = oracleWallet ?? (CAN_SWAP_ONCHAIN ? undefined : undefined);
       if (CAN_SWAP_ONCHAIN) {
@@ -166,14 +157,18 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       if (oracleWallet) {
         const synced = await syncOracleToChainlink(oracleWallet);
         await queryClient.invalidateQueries();
-        pushEvent(feePips, dev, `Oracle synced to Chainlink $${synced.toFixed(2)}`);
+        pushEvent(feeForDeviationBps(0), 0, `Oracle synced to Chainlink $${synced.toFixed(2)}`);
         return;
       }
       const synced = await requestKeeperOracleSync();
       if (synced !== null) {
         await queryClient.invalidateQueries();
-        pushEvent(feePips, dev, `Oracle synced to Chainlink $${synced.toFixed(2)}`);
+        pushEvent(feeForDeviationBps(0), 0, `Oracle synced to Chainlink $${synced.toFixed(2)}`);
       }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSyncError(msg);
+      pushEvent(feePips, dev, `Align failed: ${msg.slice(0, 80)}`);
     } finally {
       setSyncOracleBusy(false);
     }
@@ -283,48 +278,37 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
 
   const toggleOracleLive = useCallback(() => setOracleLive((v) => !v), []);
 
-  const buildLiveQuoteState = useCallback((): LivePoolState | null => {
-    if (
-      !(isLive || forkLive) ||
-      live.sqrtPriceX96 === undefined ||
-      live.liquidity === undefined ||
-      live.liquidity <= 0n ||
-      live.poolPrice === undefined ||
-      live.poolPrice <= 0 ||
-      !tickBounds
-    ) {
-      return null;
-    }
-    return {
-      sqrtPriceX96: live.sqrtPriceX96,
-      liquidity: live.liquidity,
-      tickLower: tickBounds.lower,
-      tickUpper: tickBounds.upper,
-      poolPrice: live.poolPrice,
-      deviationBpsBefore: live.deviationBps ?? liveDev,
-      oraclePrice: hookOraclePrice ?? dispOracle,
-    };
-  }, [isLive, forkLive, live.sqrtPriceX96, live.liquidity, live.poolPrice, live.deviationBps, liveDev, hookOraclePrice, dispOracle, tickBounds]);
+  const quoteLive = useCallback(
+    (amountIn: number, dir: SwapDir): SwapQuote => {
+      const oracle = hookOraclePrice ?? dispOracle;
+      const spot = pPrice > 0 ? pPrice : oracle;
+      const reserves = virtualReservesFromPrice(spot);
+      const q = quoteSwap(reserves, oracle, amountIn, dir);
+      if (live.feePips === undefined || live.deviationBps === undefined) return q;
+      const feeFraction = live.feePips / 1_000_000;
+      return {
+        ...q,
+        feePips: live.feePips,
+        feePercent: live.feePips / 10000,
+        feeAmount: q.amountIn * feeFraction,
+        deviationBpsBefore: live.deviationBps,
+      };
+    },
+    [hookOraclePrice, dispOracle, pPrice, live.feePips, live.deviationBps]
+  );
 
   const quote = useCallback(
     (amountIn: number, dir: SwapDir) => {
-      const liveState = buildLiveQuoteState();
-      if (liveState) return quoteSwapLive(liveState, amountIn, dir);
-      if (forkLive) {
-        const oracle = hookOraclePrice ?? dispOracle;
-        return quoteSwap({ weth: 0, usdc: 0 }, oracle || 0, amountIn, dir);
-      }
-      if (!isLive) return quoteSwap(reserves, oraclePrice, amountIn, dir);
-      return quoteSwap({ weth: 0, usdc: 0 }, dispOracle, amountIn, dir);
+      if (isLive || forkLive) return quoteLive(amountIn, dir);
+      return quoteSwap(reserves, oraclePrice, amountIn, dir);
     },
-    [buildLiveQuoteState, forkLive, isLive, dispOracle, hookOraclePrice, reserves, oraclePrice]
+    [isLive, forkLive, quoteLive, reserves, oraclePrice]
   );
 
   const executeSwap = useCallback(
     (amountIn: number, dir: SwapDir) => {
-      const liveState = buildLiveQuoteState();
-      if (liveState) {
-        const q = quoteSwapLive(liveState, amountIn, dir);
+      if (isLive || forkLive) {
+        const q = quoteLive(amountIn, dir);
         pushEvent(
           q.feePips,
           q.deviationBpsBefore,
@@ -341,7 +325,7 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       );
       return q;
     },
-    [buildLiveQuoteState, reserves, pushEvent]
+    [isLive, forkLive, quoteLive, reserves, pushEvent]
   );
 
   const resetPool = useCallback(async () => {
@@ -372,11 +356,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       canNudgeMockOracle: CAN_NUDGE_MOCK_ORACLE,
       mode: forkLive || isLive ? "live" : "demo",
       liveError: live.configured ? live.error : undefined,
-      liquidity,
-      clReserves,
       refreshOracle,
       syncToChainlink,
       syncOracleBusy,
+      syncError,
       alignPoolBusy,
       reserves,
       oraclePrice: dispOracle,
@@ -403,11 +386,10 @@ export function TerminalProvider({ children }: { children: ReactNode }) {
       forkLive,
       live.configured,
       live.error,
-      liquidity,
-      clReserves,
       refreshOracle,
       syncToChainlink,
       syncOracleBusy,
+      syncError,
       alignPoolBusy,
       reserves,
       dispOracle,

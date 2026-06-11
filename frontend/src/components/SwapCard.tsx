@@ -112,7 +112,7 @@ export function SwapCard() {
       </div>
 
       <div className="quote-box">
-        <Row label="Swap fee (oracle + size)">
+        <Row label="Swap fee (oracle deviation)">
           <strong style={{ color: tierAccent }}>{q ? fmtPct(q.feePercent) : "—"}</strong>
         </Row>
         <Row label="Fee amount">{q ? `${fmtNum(q.feeAmount)} ${tokenIn}` : "—"}</Row>

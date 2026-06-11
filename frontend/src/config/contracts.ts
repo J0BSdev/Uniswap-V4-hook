@@ -65,9 +65,6 @@ export const ENV = {
   // execute real on-chain swaps without a browser wallet. NEVER set in production.
   swapRouter: clean(import.meta.env.VITE_SWAP_ROUTER) as Address | "",
   devPrivateKey: clean(import.meta.env.VITE_DEV_PRIVATE_KEY) as Hex | "",
-  // Tick bounds of the seeded LP position (from SeedLiquidity script logs).
-  lpTickLower: parseInt(clean(import.meta.env.VITE_LP_TICK_LOWER) || "0", 10),
-  lpTickUpper: parseInt(clean(import.meta.env.VITE_LP_TICK_UPPER) || "0", 10),
 };
 
 // The app runs in demo mode until a hook address + pool id are configured.
