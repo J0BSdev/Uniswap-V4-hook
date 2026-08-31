@@ -49,7 +49,7 @@ contract DynamicLPFeesHook is BaseHook {
     AggregatorV3Interface public immutable sequencerUptimeFeed; // Base sequencer uptime
 
     error MustUseDynamicFees();
-    error InvalidPoolPair();
+    error InvalidPoolPair(); 
     error SequencerDown();
     error GracePeriodNotOver();
     error CurrentOraclePriceNotSet();
